@@ -79,19 +79,49 @@ export default function Dashboard() {
     }, [])
 
     const connectWs = (key: string) => {
-        const host = window.location.hostname
-        const ws = new WebSocket(`ws://${host}:3000?key=${key}`)
-        ws.onopen = () => setWsConnected(true)
-        ws.onclose = () => {
-            setWsConnected(false)
-            setTimeout(() => connectWs(key), 3000)
+        // Prevent multiple simultaneous connections
+        if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+            return;
         }
-        ws.onmessage = (e) => {
-            const data = JSON.parse(e.data)
-            if (data.type === 'STATE') {
-                setState(data.payload)
+
+        const host = window.location.host // Includes port
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+        const ws = new WebSocket(`${protocol}//${host}/ws?key=${key}`)
+
+        ws.onopen = () => {
+            if (wsRef.current === ws) {
+                console.log('[WS] Connection established');
+                setWsConnected(true)
+            } else {
+                ws.close(); // Close stray/stale connections
             }
         }
+
+        ws.onclose = (event) => {
+            if (wsRef.current === ws) {
+                console.log('[WS] Connection closed:', event.code, event.reason);
+                setWsConnected(false)
+                // Only reconnect if this is still the active socket ref
+                setTimeout(() => connectWs(key), 3000)
+            }
+        }
+
+        ws.onmessage = (e) => {
+            if (wsRef.current !== ws) return;
+            try {
+                const data = JSON.parse(e.data)
+                if (data.type === 'STATE') {
+                    setState(data.payload)
+                }
+            } catch (err) {
+                console.error('[WS] Error parsing message:', err);
+            }
+        }
+
+        ws.onerror = (err) => {
+            console.error('[WS] Connection error:', err);
+        }
+
         wsRef.current = ws
     }
 
@@ -155,8 +185,21 @@ export default function Dashboard() {
     }
 
     const handleToggleBroadcast = () => {
-        if (wsRef.current && wsConnected) {
-            wsRef.current.send(JSON.stringify({ type: state.broadcastActive ? 'STOP_BROADCAST' : 'START_BROADCAST' }))
+        const socket = wsRef.current;
+        const isReady = socket && socket.readyState === WebSocket.OPEN;
+
+        console.log('[Dashboard] Toggle Broadcast clicked');
+        console.log('[Dashboard] Current state.broadcastActive:', state.broadcastActive);
+        console.log('[Dashboard] WebSocket state (React):', wsConnected ? 'Connected' : 'Disconnected');
+        console.log('[Dashboard] WebSocket actual (Native):', socket ? (socket.readyState === 1 ? 'OPEN' : socket.readyState) : 'NULL');
+
+        if (socket && isReady) {
+            const message = JSON.stringify({ type: state.broadcastActive ? 'STOP_BROADCAST' : 'START_BROADCAST' });
+            console.log('[Dashboard] Sending message:', message);
+            socket.send(message);
+        } else {
+            console.warn('[Dashboard] Cannot send: WebSocket is not ready.');
+            alert('WebSocket ist nicht bereit! Bitte lade die Seite neu, falls das Problem bestehen bleibt.\nStatus: ' + (socket ? socket.readyState : 'Keine Verbindung'));
         }
     }
 
