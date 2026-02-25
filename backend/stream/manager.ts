@@ -90,7 +90,7 @@ export async function startBroadcast(targets: Target[], isObsConnected: boolean)
 
     const mSettings = await getMasterSettings();
     startMaster(currentTargets, mSettings);
-    startSource(currentSource, activeVideo, streamKey);
+    startSource(currentSource, activeVideo, streamKey, mSettings);
 }
 
 export function stopBroadcast(): void {
@@ -99,14 +99,15 @@ export function stopBroadcast(): void {
     stopMaster();
 }
 
-export function updateTargets(targets: Target[]): void {
+export async function updateTargets(targets: Target[]): Promise<void> {
     if (!broadcastActive) return;
 
     if (JSON.stringify(currentTargets) !== JSON.stringify(targets)) {
-        console.log('[Manager] Targets changed — hot-restarting master...');
+        console.log('[Manager] Targets changed — updating master distribution...');
         currentTargets = targets ?? [];
-        stopBroadcast();
-        setTimeout(() => startBroadcast(currentTargets, currentSource === 'obs'), 2000);
+        const mSettings = await getMasterSettings();
+        // startMaster handles stopping the old one internally
+        startMaster(currentTargets, mSettings);
     }
 }
 
@@ -120,7 +121,8 @@ export async function handleObsConnect(): Promise<void> {
     if (!broadcastActive) return;
 
     // Brief delay to let Node-Media-Server finish the RTMP handshake
-    setTimeout(() => startSource('obs', activeVideo, streamKey), 1000);
+    const mSettings = await getMasterSettings();
+    setTimeout(() => startSource('obs', activeVideo, streamKey, mSettings), 1000);
 }
 
 export async function handleObsDisconnect(): Promise<void> {
@@ -129,7 +131,8 @@ export async function handleObsDisconnect(): Promise<void> {
     currentSource = 'fallback';
     const streamKey = await getStreamKeyDb() || 'preview';
 
-    startSource('fallback', activeVideo, streamKey);
+    const mSettings = await getMasterSettings();
+    startSource('fallback', activeVideo, streamKey, mSettings);
 }
 
 export function getState(): { broadcastActive: boolean; currentSource: SourceType } {
