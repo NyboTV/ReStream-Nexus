@@ -14,6 +14,7 @@ import { getStreamKeyDb } from './backend/lib/db';
 import targetsRouter from './backend/api/targets';
 import videosRouter from './backend/api/videos';
 import setupRouter from './backend/api/setup';
+import settingsRouter from './backend/api/settings';
 
 // ─── Next.js Setup ────────────────────────────────────────────────────────────
 const dev = process.env.NODE_ENV !== 'production';
@@ -45,6 +46,7 @@ app.use('/api', async (req: express.Request, res: express.Response, next: expres
 // API Routers
 app.use('/api/targets', targetsRouter);
 app.use('/api/videos', videosRouter);
+app.use('/api/settings', settingsRouter);
 
 // NMS Stats — reads from the self-maintained activeStreams Set (reliable in all NMS versions)
 {
