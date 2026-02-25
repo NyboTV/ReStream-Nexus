@@ -12,6 +12,7 @@ export interface ProbeResult {
     fps: number;
     sampleRate: number;
     channels: number;
+    bitrate?: number;
 }
 
 /**
