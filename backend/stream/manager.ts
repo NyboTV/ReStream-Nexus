@@ -127,6 +127,7 @@ export async function handleObsDisconnect(): Promise<void> {
         width: w || 1920,
         height: h || 1080,
         fps: parseInt(fps) || 60,
+        bitrate: parseInt(bitrate) || 6000,
         sampleRate: lastObsMetadata?.sampleRate || 48000,
         channels: lastObsMetadata?.channels || 2
     };
