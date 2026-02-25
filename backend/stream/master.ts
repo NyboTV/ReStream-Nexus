@@ -11,6 +11,10 @@ export const masterEvents = new EventEmitter();
 
 let masterProcess: ChildProcess | null = null;
 let _broadcastActive = false;
+let _targets: Target[] = [];
+let _resolution = '1920x1080';
+let _fps = 30;
+
 export interface MasterSettings {
     resolution: string;
     fps: number;
@@ -105,7 +109,7 @@ export function startMaster(targets: Target[], settings?: MasterSettings): void 
     });
 }
 
-export function killMaster(): void {
+export function stopMaster(): void {
     if (masterProcess) {
         console.log('[Master] Stopping master process (Soft Stop)...');
         _broadcastActive = false;
