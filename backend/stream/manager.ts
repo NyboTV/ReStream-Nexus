@@ -1,12 +1,12 @@
+```javascript
 import path from 'path';
 import fs from 'fs';
 import { EventEmitter } from 'events';
 import { getSetting, getStreamKeyDb, Target } from '../lib/db';
-import { VIDEOS_DIR } from '../lib/config';
-import { probeStream } from './probe';
+import { VIDEOS_DIR, CANVAS_RTMP_URL } from '../lib/config';
+import { probeStream, ProbeResult } from './probe';
 import { startSource, killSource, SourceType } from './source';
-import { startMaster, killMaster, masterEvents } from './master';
-import { ProbeResult } from './probe';
+import { startMaster, stopMaster, masterEvents } from './master';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let broadcastActive = false;
@@ -37,11 +37,11 @@ getSetting('active_video')
 async function captureObsMetadata(streamKey: string) {
     console.log('[Manager] Probing OBS stream for settings mirroring...');
     const obsUrl = `rtmp://localhost:1935/live/${streamKey}`;
-    const meta = await probeStream(obsUrl);
-    if (meta) {
-        console.log('[Manager] Captured OBS metadata:', meta);
-        lastObsMetadata = meta;
-    }
+const meta = await probeStream(obsUrl);
+if (meta) {
+    console.log('[Manager] Captured OBS metadata:', meta);
+    lastObsMetadata = meta;
+}
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -116,7 +116,22 @@ export async function handleObsDisconnect(): Promise<void> {
     console.log('[Manager] OBS disconnected — seamlessly switching to fallback...');
     currentSource = 'fallback';
     const streamKey = await getStreamKeyDb() || 'preview';
-    startSource('fallback', activeVideo, streamKey, lastObsMetadata);
+
+    // Load manual settings or use captured metadata
+    const res = await getSetting('fallback_resolution') || (lastObsMetadata?.width + 'x' + lastObsMetadata?.height) || '1920x1080';
+    const fps = await getSetting('fallback_fps') || String(lastObsMetadata?.fps || 60);
+    const bitrate = await getSetting('fallback_bitrate') || '6000';
+
+    const [w, h] = res.split('x').map(Number);
+    const manualMeta: ProbeResult = {
+        width: w || 1920,
+        height: h || 1080,
+        fps: parseInt(fps) || 60,
+        sampleRate: lastObsMetadata?.sampleRate || 48000,
+        channels: lastObsMetadata?.channels || 2
+    };
+
+    startSource('fallback', activeVideo, streamKey, manualMeta);
 }
 
 export function getState(): { broadcastActive: boolean; currentSource: SourceType } {
