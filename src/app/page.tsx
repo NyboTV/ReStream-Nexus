@@ -362,6 +362,7 @@ export default function Dashboard() {
                                             value={qualitySettings.resolution}
                                             onChange={(e) => setQualitySettings({ ...qualitySettings, resolution: e.target.value })}
                                             className="form-control p-025 text-sm"
+                                            title={t('resolution')}
                                         >
                                             <option value="1920x1080">1920x1080 (FullHD)</option>
                                             <option value="1280x720">1280x720 (HD)</option>
@@ -376,6 +377,7 @@ export default function Dashboard() {
                                                 value={qualitySettings.fps}
                                                 onChange={(e) => setQualitySettings({ ...qualitySettings, fps: parseInt(e.target.value) })}
                                                 className="form-control p-025 text-sm"
+                                                title={t('fps')}
                                             />
                                         </div>
                                         <div className="form-group mb-0 flex-1">
@@ -386,6 +388,7 @@ export default function Dashboard() {
                                                 step="500"
                                                 onChange={(e) => setQualitySettings({ ...qualitySettings, bitrate: parseInt(e.target.value) })}
                                                 className="form-control p-025 text-sm"
+                                                title={t('bitrate_k')}
                                             />
                                         </div>
                                     </div>
