@@ -21,6 +21,8 @@ export default function Dashboard() {
 
     // Realtime Polling
     const [obsStats, setObsStats] = useState({ bitrate: 0, fps: 0, width: 0, height: 0 })
+    const [qualitySettings, setQualitySettings] = useState({ resolution: '1920x1080', fps: 60, bitrate: 6000 })
+    const [isSavingQuality, setIsSavingQuality] = useState(false)
 
     // Modal States
     const [modalVideos, setModalVideos] = useState(false)
@@ -62,6 +64,7 @@ export default function Dashboard() {
                     connectWs(cookieKey)
                     fetchTargets()
                     fetchVideos()
+                    fetchQualitySettings()
                     if (!localStorage.getItem('tutorial_shown')) {
                         setShowTutorial(true)
                         localStorage.setItem('tutorial_shown', '1')
@@ -137,6 +140,13 @@ export default function Dashboard() {
             const { data } = await axios.get('/api/videos')
             setVideos(data.files || [])
             setActiveVideo(data.activeVideo || '')
+        } catch (e) { }
+    }
+
+    const fetchQualitySettings = async () => {
+        try {
+            const { data } = await axios.get('/api/settings/fallback')
+            if (data) setQualitySettings(data)
         } catch (e) { }
     }
 
@@ -229,6 +239,18 @@ export default function Dashboard() {
     const handleDeleteVideo = async (file: string) => {
         await axios.delete(`/api/videos/${file}`)
         fetchVideos()
+    }
+
+    const handleSaveQuality = async () => {
+        setIsSavingQuality(true)
+        try {
+            await axios.post('/api/settings/fallback', qualitySettings)
+            alert(t('quality_saved'))
+        } catch (e) {
+            alert('Error saving quality settings')
+        } finally {
+            setIsSavingQuality(false)
+        }
     }
 
     return (
@@ -327,6 +349,56 @@ export default function Dashboard() {
                                             </svg>
                                         </button>
                                     )}
+                                </div>
+                            </div>
+
+                            {/* Manual Quality Control Panel */}
+                            <div className="signal-card">
+                                <div className="text-muted mb-05 text-sm">{t('quality_settings')}</div>
+                                <div className="grid-form gap-05">
+                                    <div className="form-group mb-0">
+                                        <label className="text-xs">{t('resolution')}</label>
+                                        <select
+                                            value={qualitySettings.resolution}
+                                            onChange={(e) => setQualitySettings({ ...qualitySettings, resolution: e.target.value })}
+                                            className="form-control p-025 text-sm"
+                                        >
+                                            <option value="1920x1080">1920x1080 (FullHD)</option>
+                                            <option value="1280x720">1280x720 (HD)</option>
+                                            <option value="854x480">854x480 (480p)</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-05">
+                                        <div className="form-group mb-0 flex-1">
+                                            <label className="text-xs">{t('fps')}</label>
+                                            <input
+                                                type="number"
+                                                value={qualitySettings.fps}
+                                                onChange={(e) => setQualitySettings({ ...qualitySettings, fps: parseInt(e.target.value) })}
+                                                className="form-control p-025 text-sm"
+                                            />
+                                        </div>
+                                        <div className="form-group mb-0 flex-1">
+                                            <label className="text-xs">{t('bitrate_k')}</label>
+                                            <input
+                                                type="number"
+                                                value={qualitySettings.bitrate}
+                                                step="500"
+                                                onChange={(e) => setQualitySettings({ ...qualitySettings, bitrate: parseInt(e.target.value) })}
+                                                className="form-control p-025 text-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleSaveQuality}
+                                        disabled={isSavingQuality}
+                                        className="btn btn-primary p-04 text-xs mt-025 w-full"
+                                    >
+                                        {isSavingQuality ? '...' : t('save_quality')}
+                                    </button>
+                                    <div className="text-xs text-muted italic mt-025" style={{ fontSize: '0.65rem' }}>
+                                        {t('quality_hint')}
+                                    </div>
                                 </div>
                             </div>
 
