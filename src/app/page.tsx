@@ -3,66 +3,15 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import Cookies from 'js-cookie'
+import { useTranslations, Lang } from '@/lib/i18n'
+import Header from '@/components/Header'
 
-// --- i18n Dictionary ---
-const translations = {
-    de: {
-        system_status: "System-Status:", logout: "Logout", command_center: "Kommandozentrale",
-        incoming_obs: "Eingehendes OBS-Signal", waiting_obs: "Warte auf OBS", obs_receiving: "Daten empfangen",
-        server: "Server:", streamkey: "Streamkey:", env_config: "(Deine .env Konfiguration)",
-        outgoing_cast: "Ausgehende Übertragung", offline: "Offline", live_on_platforms: "Live auf Plattformen",
-        preview_warning: "Nur Preview-Modus aktiv (Keine externen Ziele gewählt)",
-        fallback_videos: "Fallback-Videos", fallback_desc: "Backup-Videos für den Fall eines Stream-Ausfalls.",
-        video_select: "Video Auswählen", active_backup: "Aktives Backup", no_backup: "Kein Backup geladen",
-        media_library: "Mediathek", target_management: "Ziel-Verwaltung", select_platform: "Plattform auswählen",
-        custom: "Custom", rtmp_server_url: "RTMP Server-URL", stream_key_label: "Stream-Key",
-        active_platforms: "Aktive Plattformen", zero_targets: "0 Ziele", targets_count: "Ziele", active_count: "Aktiv",
-        edit: "Bearbeiten", analytics_stats: "Analytics & Statistiken", server_obs_in: "Server (OBS Eingang)",
-        bitrate: "Bitrate:", uptime: "Uptime:", add_targets_msg: "Füge Ziele hinzu, um hier Plattform-Statistiken zu sehen.",
-        video_library: "Video Mediathek", manage_platforms: "Plattformen verwalten",
-        source_obs: "Quelle: Live OBS Feed", source_fallback: "Quelle: Fallback Video-Loop!",
-        current_broadcast_source: "Aktuelle Sende-Quelle", obs_live_feed: "OBS Live Feed",
-        obs_live_sub: "Dein OBS Stream wird gesendet.", fallback_video: "Fallback Video", fallback_sub: "Stream Offline - Loop läuft.",
-        not_broadcasting: "Nicht auf Sendung", not_broadcasting_sub: "Übertragung an Plattformen ist pausiert.",
-        start_broadcast: "Übertragung Starten (Rendern)", stop_broadcast: "Übertragung Beenden", reconnect: "Reconnect",
-        no_videos_server: "Keine Videos auf dem Server. Bitte lade eine .mp4 Datei hoch.",
-        is_active: "Ist Aktiv", set_loop: "Als Loop setzen", delete_video: "Video löschen",
-        no_targets_defined: "Keine Übertragungsziele definiert.",
-        enabled: "Aktiviert", paused: "Pausiert", remove: "Entfernen",
-        viewers: "Zuschauer:", status: "Status:", sending: "Sende",
-        uploading: "Lädt hoch...", upload_error: "Fehler beim Upload. Bitte versuche es später."
-    },
-    en: {
-        system_status: "System-Status:", logout: "Logout", command_center: "Command Center",
-        incoming_obs: "Incoming OBS Signal", waiting_obs: "Waiting for OBS", obs_receiving: "Receiving Data",
-        server: "Server:", streamkey: "Streamkey:", env_config: "(Your .env Config)",
-        outgoing_cast: "Outgoing Broadcast", offline: "Offline", live_on_platforms: "Live on Platforms",
-        preview_warning: "Preview Mode Active (No external targets selected)",
-        fallback_videos: "Fallback Videos", fallback_desc: "Backup videos in case the stream drops.",
-        video_select: "Select Video", active_backup: "Active Backup", no_backup: "No backup loaded",
-        media_library: "Media Library", target_management: "Target Management", select_platform: "Select Platform",
-        custom: "Custom", rtmp_server_url: "RTMP Server URL", stream_key_label: "Stream Key",
-        active_platforms: "Active Platforms", zero_targets: "0 Targets", targets_count: "Targets", active_count: "Active",
-        edit: "Edit", analytics_stats: "Analytics & Statistics", server_obs_in: "Server (OBS Input)",
-        bitrate: "Bitrate:", uptime: "Uptime:", add_targets_msg: "Add targets to see platform statistics here.",
-        video_library: "Video Library", manage_platforms: "Manage Platforms",
-        source_obs: "Source: Live OBS Feed", source_fallback: "Source: Fallback Video Loop!",
-        current_broadcast_source: "Current Broadcast Source", obs_live_feed: "OBS Live Feed",
-        obs_live_sub: "Your OBS stream is broadcasting.", fallback_video: "Fallback Video", fallback_sub: "Stream Offline - Loop running.",
-        not_broadcasting: "Off-Air", not_broadcasting_sub: "Broadcast to platforms is paused.",
-        start_broadcast: "Start Broadcast (Render)", stop_broadcast: "Stop Broadcast", reconnect: "Reconnect",
-        no_videos_server: "No videos on the server. Please upload an .mp4 file.",
-        is_active: "Active", set_loop: "Set as Loop", delete_video: "Delete Video",
-        no_targets_defined: "No broadcast targets defined.",
-        enabled: "Enabled", paused: "Paused", remove: "Remove",
-        viewers: "Viewers:", status: "Status:", sending: "Live",
-        uploading: "Uploading...", upload_error: "Upload failed. Please try again later."
-    }
-}
 
 export default function Dashboard() {
-    const [lang, setLang] = useState<'de' | 'en'>('de')
+    const [lang, setLang] = useState<Lang>('de')
     const [isAuthenticated, setIsAuthenticated] = useState(false)
+    const [streamKey, setStreamKey] = useState('')
+    const [showTutorial, setShowTutorial] = useState(false)
 
     const [state, setState] = useState({ obsConnected: false, broadcastActive: false, currentSource: null, publicIp: '' })
     const [targets, setTargets] = useState<any[]>([])
@@ -83,24 +32,47 @@ export default function Dashboard() {
     const [newTargetKey, setNewTargetKey] = useState('')
 
     const wsRef = useRef<WebSocket | null>(null)
-
-    const t = (key: keyof typeof translations['en']) => {
-        return translations[lang][key] || key
-    }
+    const t = useTranslations(lang)
 
     useEffect(() => {
-        const saved = localStorage.getItem('lang') as 'de' | 'en'
-        if (saved && translations[saved]) setLang(saved)
+        const saved = localStorage.getItem('lang') as Lang
+        if (saved && (saved === 'de' || saved === 'en')) setLang(saved)
 
-        const cookieKey = Cookies.get('streamKey')
-        if (cookieKey) {
-            setIsAuthenticated(true)
-            connectWs(cookieKey)
-            fetchTargets()
-            fetchVideos()
-        } else {
-            window.location.href = '/login'
-        }
+        // Always check setup status FIRST — regardless of any cookie
+        axios.get('/api/setup/status')
+            .then(async ({ data }) => {
+                if (!data.setupComplete) {
+                    window.location.href = '/setup'
+                    return
+                }
+
+                // Setup is done — check cookie
+                const cookieKey = Cookies.get('streamKey')
+                if (!cookieKey) {
+                    window.location.href = '/login'
+                    return
+                }
+
+                // Validate cookie key against DB (clears stale .env-era cookies)
+                try {
+                    await axios.get('/api/targets', { headers: { 'x-stream-key': cookieKey } })
+                    // Key is valid
+                    setStreamKey(cookieKey)
+                    setIsAuthenticated(true)
+                    connectWs(cookieKey)
+                    fetchTargets()
+                    fetchVideos()
+                    if (!localStorage.getItem('tutorial_shown')) {
+                        setShowTutorial(true)
+                        localStorage.setItem('tutorial_shown', '1')
+                    }
+                } catch {
+                    // Stale/wrong cookie — clear it and send to login
+                    Cookies.remove('streamKey')
+                    window.location.href = '/login'
+                }
+            })
+            .catch(() => { window.location.href = '/login' })
 
         const interval = setInterval(fetchStreamStats, 2000)
         return () => clearInterval(interval)
@@ -140,8 +112,7 @@ export default function Dashboard() {
 
     const fetchStreamStats = async () => {
         try {
-            const host = window.location.hostname
-            const { data } = await axios.get(`http://${host}:8000/api/streams`)
+            const { data } = await axios.get('/api/nms/streams')
             if (data?.live) {
                 const streamKey = Object.keys(data.live)[0]
                 if (streamKey) {
@@ -178,7 +149,7 @@ export default function Dashboard() {
 
     const handleAddTarget = async (e: React.FormEvent) => {
         e.preventDefault()
-        await axios.post('/api/targets', { name: newTargetName, url: newTargetUrl, key: newTargetKey })
+        await axios.post('/api/targets', { name: newTargetName, url: newTargetUrl, stream_key: newTargetKey })
         setNewTargetKey('')
         fetchTargets()
     }
@@ -200,7 +171,7 @@ export default function Dashboard() {
         const formData = new FormData()
         formData.append('video', e.target.files[0])
         try {
-            await axios.post('/api/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+            await axios.post('/api/videos/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
             fetchVideos()
         } catch (err) {
             console.error(err)
@@ -219,28 +190,40 @@ export default function Dashboard() {
 
     return (
         <div className="app-container">
-            <header className="sticky-nav">
-                <h1>ReStream Nexus</h1>
-                <div className="flex-center gap-15">
-                    <div className="status-badge">
-                        <span>{t('system_status')}</span>
-                        <span className={`status-dot ${wsConnected ? 'active' : 'danger'}`}></span>
+            {/* Tutorial Modal (shown once on first visit) */}
+            {showTutorial && (
+                <div className="modal open">
+                    <div className="modal-backdrop" onClick={() => setShowTutorial(false)} />
+                    <div className="modal-content card max-w-600" style={{ textAlign: 'center', padding: '2.5rem' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚡</div>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem' }}>So funktioniert ReStream Nexus</h2>
+                        <div style={{ textAlign: 'left', marginBottom: '1.5rem' }}>
+                            <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid var(--primary)', borderRadius: '12px', padding: '1rem', marginBottom: '0.75rem' }}>
+                                <strong>Schritt 1 — OBS Stream starten</strong>
+                                <p className="text-muted text-sm" style={{ marginTop: '0.25rem' }}>Starte deinen Stream in OBS. ReStream Nexus empfängt das Signal automatisch via RTMP.</p>
+                            </div>
+                            <div style={{ background: 'rgba(46,213,115,0.1)', border: '1px solid var(--success)', borderRadius: '12px', padding: '1rem', marginBottom: '0.75rem' }}>
+                                <strong>Schritt 2 — Übertragung auf der Website starten</strong>
+                                <p className="text-muted text-sm" style={{ marginTop: '0.25rem' }}>Klicke auf "Übertragung Starten" in der Kommandozentrale. Der Stream wird an alle aktiven Plattformen weitergeleitet.</p>
+                            </div>
+                            <div style={{ background: 'rgba(255,165,2,0.1)', border: '1px solid var(--warning)', borderRadius: '12px', padding: '1rem' }}>
+                                <strong>Wichtig: Stream läuft solange die Übertragung aktiv ist</strong>
+                                <p className="text-muted text-sm" style={{ marginTop: '0.25rem' }}>Der Stream zu den Plattformen läuft solange du auf der Seite auf "Übertragung Beenden" klickst – auch wenn OBS getrennt wird (dann läuft das Fallback-Video).</p>
+                            </div>
+                        </div>
+                        <button className="btn btn-primary" onClick={() => setShowTutorial(false)}>Verstanden, los geht&apos;s! 🚀</button>
                     </div>
-                    <select
-                        value={lang}
-                        onChange={(e: any) => {
-                            setLang(e.target.value)
-                            localStorage.setItem('lang', e.target.value)
-                        }}
-                        className="btn p-04-10 text-xs lang-select-btn"
-                        title="Language"
-                    >
-                        <option value="de">🇩🇪 DE</option>
-                        <option value="en">🇬🇧 EN</option>
-                    </select>
-                    <button onClick={() => { Cookies.remove('streamKey'); window.location.href = '/login' }} className="btn btn-danger p-04-10 text-xs">{t('logout')}</button>
                 </div>
-            </header>
+            )}
+
+            <Header
+                lang={lang}
+                setLang={setLang}
+                wsConnected={wsConnected}
+                publicIp={state.publicIp}
+                streamKey={streamKey}
+                onLogout={() => { Cookies.remove('streamKey'); window.location.href = '/login' }}
+            />
 
             <main>
                 {/* Kommandozentrale */}
@@ -268,7 +251,7 @@ export default function Dashboard() {
                                     <span>{t('server')}</span> <span className="server-ip-display text-primary font-mono">rtmp://{state.publicIp}/live</span>
                                 </div>
                                 <div className="text-muted text-sm mt-025">
-                                    <span>{t('streamkey')}</span> <span className="text-primary font-mono">{t('env_config')}</span>
+                                    <span>{t('streamkey')}</span> <span className="text-primary font-mono" style={{ fontSize: '0.78rem', wordBreak: 'break-all' }}>{streamKey || '—'}</span>
                                 </div>
                             </div>
 
@@ -285,6 +268,23 @@ export default function Dashboard() {
                                         {state.currentSource === 'obs' ? t('source_obs') : t('source_fallback')}
                                     </div>
                                 )}
+
+                                {/* Control Buttons */}
+                                <div className="flex gap-1 mt-1">
+                                    <button onClick={handleToggleBroadcast} className={`btn ${state.broadcastActive ? 'btn-danger' : 'btn-primary'} flex-1 p-05 text-sm`}>
+                                        {state.broadcastActive ? t('stop_broadcast') : t('start_broadcast')}
+                                    </button>
+                                    {state.broadcastActive && (
+                                        <button onClick={handleReconnect} className="btn btn-warning p-05 text-sm flex-center" title={t('reconnect')} style={{ background: '#f59e0b', color: '#000' }}>
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M23 4v6h-6"></path>
+                                                <path d="M1 20v-6h6"></path>
+                                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
+                                                <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
                         </div>
@@ -443,18 +443,26 @@ export default function Dashboard() {
                                 <select
                                     value={newTargetName}
                                     onChange={(e) => {
-                                        setNewTargetName(e.target.value)
-                                        if (e.target.value === 'Twitch') setNewTargetUrl('rtmp://live.twitch.tv/app')
-                                        else if (e.target.value === 'YouTube') setNewTargetUrl('rtmp://a.rtmp.youtube.com/live2')
-                                        else if (e.target.value === 'Kick') setNewTargetUrl('rtmps://fa723fc1b171.global-contribute.live-video.net:443/app/')
-                                        else setNewTargetUrl('')
+                                        const p = e.target.value
+                                        setNewTargetName(p)
+                                        const map: Record<string, string> = {
+                                            Twitch: 'rtmp://live.twitch.tv/app',
+                                            YouTube: 'rtmp://a.rtmp.youtube.com/live2',
+                                            Facebook: 'rtmps://live-api-s.facebook.com:443/rtmp',
+                                            Kick: 'rtmps://fa723fc1b171.global-contribute.live-video.net/app',
+                                            Trovo: 'rtmp://live.trovo.live/live',
+                                            DLive: 'rtmp://stream.dlive.tv/live',
+                                            VK: 'rtmp://ovsu.mycdn.me/input/',
+                                            'OK.ru': 'rtmp://rtmp.ok.ru/live',
+                                            Custom: ''
+                                        }
+                                        setNewTargetUrl(map[p] || '')
                                     }}
                                     className="form-control" title="Plattform"
                                 >
-                                    <option value="Twitch">Twitch</option>
-                                    <option value="YouTube">YouTube</option>
-                                    <option value="Kick">Kick</option>
-                                    <option value="Custom">{t('custom')}</option>
+                                    {['Twitch', 'YouTube', 'Facebook', 'Kick', 'TikTok', 'Instagram', 'Trovo', 'DLive', 'VK', 'OK.ru', 'Custom'].map(p => (
+                                        <option key={p} value={p}>{t(`platform_${p.toLowerCase().replace('.', '')}` as any)}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div className="form-group mb-0">

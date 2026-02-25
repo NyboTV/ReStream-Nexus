@@ -1,24 +1,34 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 import Cookies from 'js-cookie'
 
 export default function LoginPage() {
-    const [key, setKey] = useState('')
+    const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+
+    // Redirect to setup if not complete
+    useEffect(() => {
+        axios.get('/api/setup/status')
+            .then(({ data }) => {
+                if (!data.setupComplete) window.location.href = '/setup'
+            })
+            .catch(() => { })
+    }, [])
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
         setError('')
         try {
-            // Validate key against a lightweight API endpoint
-            await axios.get('/api/targets', { headers: { 'x-stream-key': key } })
-            Cookies.set('streamKey', key, { expires: 30 })
-            window.location.href = '/'
+            const { data } = await axios.post('/api/setup/verify-password', { password })
+            if (data.streamKey) {
+                Cookies.set('streamKey', data.streamKey, { expires: 30 })
+                window.location.href = '/'
+            }
         } catch {
-            setError('Ungültiger Stream-Key. Bitte erneut versuchen.')
+            setError('Falsches Passwort. Bitte erneut versuchen.')
             setLoading(false)
         }
     }
@@ -26,18 +36,21 @@ export default function LoginPage() {
     return (
         <div className="min-h-screen flex-center">
             <div className="card" style={{ width: '100%', maxWidth: '400px' }}>
-                <h1 className="login-title">ReStream Nexus</h1>
-                <p className="text-muted text-sm mb-2">Bitte gib deinen Stream-Key ein, um fortzufahren.</p>
+                <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                    <span style={{ fontSize: '3rem' }}>⚡</span>
+                    <h1 className="login-title" style={{ marginTop: '0.5rem' }}>ReStream Nexus</h1>
+                    <p className="text-muted text-sm">Bitte melde dich an, um fortzufahren.</p>
+                </div>
 
                 <form onSubmit={handleLogin}>
                     <div className="form-group">
-                        <label className="text-muted text-sm">Stream-Key</label>
+                        <label className="text-muted text-sm">Passwort</label>
                         <input
                             type="password"
-                            value={key}
-                            onChange={(e) => setKey(e.target.value)}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
                             className="form-control"
-                            placeholder="SerienSkylan_StreamKey"
+                            placeholder="Dein Passwort"
                             required
                             autoFocus
                         />

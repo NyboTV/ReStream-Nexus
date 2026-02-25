@@ -7,6 +7,9 @@ const outfit = Outfit({ subsets: ['latin'] })
 export const metadata: Metadata = {
     title: 'ReStream Nexus',
     description: 'Seamless RTMP streaming proxy with Fallback integration',
+    icons: {
+        icon: '/favicon.ico',
+    },
 }
 
 export default function RootLayout({

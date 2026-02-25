@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage, Server } from 'http';
-import { STREAM_KEY } from '../lib/config';
+import { getStreamKeyDb } from '../lib/db';
 import { getEnabledTargets } from '../lib/db';
 import { startBroadcast, stopBroadcast, getState } from '../stream/manager';
 import { getPublicIp } from '../lib/ip';
@@ -36,15 +36,16 @@ export function attachWebSocketServer(httpServer: Server, obsConnectedRef: { val
         });
 
     // Attach WebSocket upgrade to the HTTP server (intercepts /ws paths)
-    httpServer.on('upgrade', (req: IncomingMessage, socket: any, head: Buffer) => {
+    httpServer.on('upgrade', async (req: IncomingMessage, socket: any, head: Buffer) => {
         // Skip Next.js HMR upgrade requests
         if (req.url?.startsWith('/_next/')) return;
 
         const url = new URL(req.url ?? '', `http://${req.headers.host}`);
         const cookies = parseCookies(req.headers.cookie);
+        const streamKey = await getStreamKeyDb();
         const authenticated =
-            cookies.streamKey === STREAM_KEY ||
-            url.searchParams.get('key') === STREAM_KEY;
+            cookies.streamKey === streamKey ||
+            url.searchParams.get('key') === streamKey;
 
         if (!authenticated) {
             socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');

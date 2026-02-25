@@ -112,4 +112,38 @@ export function setSetting(key: string, value: string): Promise<number> {
     });
 }
 
+// ─── Setup Helpers ───────────────────────────────────────────────────────────
+export function isSetupComplete(): Promise<boolean> {
+    return new Promise((resolve) => {
+        db.get<{ cnt: number }>(
+            `SELECT COUNT(*) as cnt FROM settings WHERE key IN ('password_hash', 'stream_key')`,
+            (err, row) => resolve(!err && row?.cnt === 2)
+        );
+    });
+}
+
+export function getPasswordHash(): Promise<string | null> {
+    return getSetting('password_hash');
+}
+
+export function setPasswordHash(hash: string): Promise<number> {
+    return setSetting('password_hash', hash);
+}
+
+export function setStreamKeyDb(key: string): Promise<number> {
+    return setSetting('stream_key', key);
+}
+
+export function getStreamKeyDb(): Promise<string | null> {
+    return getSetting('stream_key');
+}
+
+export function getSetupStep(): Promise<number> {
+    return getSetting('setup_step').then(v => v ? parseInt(v, 10) : 1);
+}
+
+export function setSetupStep(step: number): Promise<number> {
+    return setSetting('setup_step', String(step));
+}
+
 export { db };
