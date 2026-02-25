@@ -20,7 +20,7 @@ export const translations = {
         current_broadcast_source: "Aktuelle Sende-Quelle", obs_live_feed: "OBS Live Feed",
         obs_live_sub: "Dein OBS Stream wird gesendet.", fallback_video: "Fallback Video", fallback_sub: "Stream Offline - Loop läuft.",
         not_broadcasting: "Nicht auf Sendung", not_broadcasting_sub: "Übertragung an Plattformen ist pausiert.",
-        start_broadcast: "Übertragung Starten (Rendern)", stop_broadcast: "Übertragung Beenden", reconnect: "Reconnect",
+        start_broadcast: "MAIN Stream Starten", stop_broadcast: "Übertragung Beenden", reconnect: "Reconnect",
         no_videos_server: "Keine Videos auf dem Server. Bitte lade eine .mp4 Datei hoch.",
         is_active: "Ist Aktiv", set_loop: "Als Loop setzen", delete_video: "Video löschen",
         no_targets_defined: "Keine Übertragungsziele definiert.",
@@ -71,12 +71,12 @@ export const translations = {
         platform_vk: "VK",
         platform_okru: "OK.ru",
         platform_custom: "Custom",
-        quality_settings: "Qualitätseinstellungen",
+        quality_settings: "MAIN Stream Qualität",
         resolution: "Auflösung",
         fps: "FPS",
         bitrate_k: "Bitrate (kbps)",
         save_quality: "Qualität Speichern",
-        quality_hint: "Hinweis: Diese Einstellungen sollten synchron mit deinem OBS sein.",
+        quality_hint: "Hinweis: Diese Einstellungen bestimmen die Qualität des MAIN Streams zu allen Plattformen.",
         quality_saved: "Qualität gespeichert!"
     },
     en: {
@@ -97,7 +97,7 @@ export const translations = {
         current_broadcast_source: "Current Broadcast Source", obs_live_feed: "OBS Live Feed",
         obs_live_sub: "Your OBS stream is broadcasting.", fallback_video: "Fallback Video", fallback_sub: "Stream Offline - Loop running.",
         not_broadcasting: "Off-Air", not_broadcasting_sub: "Broadcast to platforms is paused.",
-        start_broadcast: "Start Broadcast (Render)", stop_broadcast: "Stop Broadcast", reconnect: "Reconnect",
+        start_broadcast: "Start MAIN Stream", stop_broadcast: "Stop Broadcast", reconnect: "Reconnect",
         no_videos_server: "No videos on the server. Please upload an .mp4 file.",
         is_active: "Active", set_loop: "Set as Loop", delete_video: "Delete Video",
         no_targets_defined: "No broadcast targets defined.",
@@ -148,12 +148,12 @@ export const translations = {
         platform_vk: "VK",
         platform_okru: "OK.ru",
         platform_custom: "Custom",
-        quality_settings: "Quality Settings",
+        quality_settings: "MAIN Stream Quality",
         resolution: "Resolution",
         fps: "FPS",
         bitrate_k: "Bitrate (kbps)",
         save_quality: "Save Quality",
-        quality_hint: "Note: These settings should be synced with your OBS.",
+        quality_hint: "Note: These settings determine the quality of the MAIN stream to all platforms.",
         quality_saved: "Quality saved!"
     }
 }
