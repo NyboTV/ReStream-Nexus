@@ -1,4 +1,3 @@
-```javascript
 import path from 'path';
 import fs from 'fs';
 import { EventEmitter } from 'events';
@@ -37,11 +36,11 @@ getSetting('active_video')
 async function captureObsMetadata(streamKey: string) {
     console.log('[Manager] Probing OBS stream for settings mirroring...');
     const obsUrl = `rtmp://localhost:1935/live/${streamKey}`;
-const meta = await probeStream(obsUrl);
-if (meta) {
-    console.log('[Manager] Captured OBS metadata:', meta);
-    lastObsMetadata = meta;
-}
+    const meta = await probeStream(obsUrl);
+    if (meta) {
+        console.log('[Manager] Captured OBS metadata:', meta);
+        lastObsMetadata = meta;
+    }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
