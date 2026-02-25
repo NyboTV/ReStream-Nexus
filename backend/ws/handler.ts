@@ -43,21 +43,46 @@ export function attachWebSocketServer(httpServer: Server, obsConnectedRef: { val
         const url = new URL(req.url ?? '', `http://${req.headers.host}`);
         const cookies = parseCookies(req.headers.cookie);
         const streamKey = await getStreamKeyDb();
+
+        console.log('[WS-Upgrade] Checking authentication...');
+        console.log('[WS-Upgrade] Cookie Key:', cookies.streamKey);
+        console.log('[WS-Upgrade] Query Key:', url.searchParams.get('key'));
+        console.log('[WS-Upgrade] Stored Key:', streamKey);
+
         const authenticated =
             cookies.streamKey === streamKey ||
             url.searchParams.get('key') === streamKey;
 
         if (!authenticated) {
+            console.warn('[WS-Upgrade] Authentication failed!');
             socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
             socket.destroy();
             return;
         }
 
-        wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+        console.log('[WS-Upgrade] Authentication successful.');
+        wss.handleUpgrade(req, socket, head, (ws) => {
+            // Note: we don't use req here anymore, connection event handles it
+            wss.emit('connection', ws, req);
+        });
     });
 
+    // Cleanup interval for stale connections
+    const interval = setInterval(() => {
+        wss.clients.forEach((ws: any) => {
+            if (ws.isAlive === false) return ws.terminate();
+            ws.isAlive = false;
+            ws.ping();
+        });
+    }, 30000);
+
+    wss.on('close', () => clearInterval(interval));
+
     // Handle incoming messages
-    wss.on('connection', (ws: WebSocket) => {
+    wss.on('connection', (ws: any) => {
+        ws.isAlive = true;
+        ws.on('pong', () => { ws.isAlive = true; });
+
         // Send current state immediately on connect
         ws.send(
             JSON.stringify({
@@ -73,6 +98,7 @@ export function attachWebSocketServer(httpServer: Server, obsConnectedRef: { val
         ws.on('message', async (raw) => {
             try {
                 const data = JSON.parse(raw.toString()) as { type: string };
+                console.log('[WS] Received message:', data.type);
 
                 if (data.type === 'START_BROADCAST') {
                     const targets = await getEnabledTargets();
