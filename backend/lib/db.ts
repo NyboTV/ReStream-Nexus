@@ -114,12 +114,11 @@ export function setSetting(key: string, value: string): Promise<number> {
 
 // ─── Setup Helpers ───────────────────────────────────────────────────────────
 export function isSetupComplete(): Promise<boolean> {
-    return new Promise((resolve) => {
-        db.get<{ cnt: number }>(
-            `SELECT COUNT(*) as cnt FROM settings WHERE key IN ('password_hash', 'stream_key')`,
-            (err, row) => resolve(!err && row?.cnt === 2)
-        );
-    });
+    return getSetting('setup_finished').then(v => v === '1');
+}
+
+export function setSetupFinished(): Promise<number> {
+    return setSetting('setup_finished', '1');
 }
 
 export function getPasswordHash(): Promise<string | null> {
