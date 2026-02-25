@@ -43,6 +43,18 @@ async function captureObsMetadata(streamKey: string) {
     }
 }
 
+async function getMasterSettings(): Promise<any> {
+    const res = await getSetting('fallback_resolution') || '1920x1080';
+    const fps = await getSetting('fallback_fps') || '60';
+    const bitrate = await getSetting('fallback_bitrate') || '6000';
+
+    return {
+        resolution: res,
+        fps: parseInt(fps),
+        bitrate: parseInt(bitrate)
+    };
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function setActiveVideo(filepath: string): Promise<void> {
@@ -76,14 +88,15 @@ export async function startBroadcast(targets: Target[], isObsConnected: boolean)
         }
     }
 
-    startMaster(currentTargets);
-    startSource(currentSource, activeVideo, streamKey, lastObsMetadata);
+    const mSettings = await getMasterSettings();
+    startMaster(currentTargets, mSettings);
+    startSource(currentSource, activeVideo, streamKey);
 }
 
 export function stopBroadcast(): void {
     broadcastActive = false;
     killSource();
-    killMaster();
+    stopMaster();
 }
 
 export function updateTargets(targets: Target[]): void {
@@ -101,7 +114,7 @@ export async function handleObsConnect(): Promise<void> {
     currentSource = 'obs';
     const streamKey = await getStreamKeyDb() || 'preview';
 
-    // Capture metadata immediately regardless of broadcast state
+    // Metadata capture is less critical now as master handles output format
     captureObsMetadata(streamKey);
 
     if (!broadcastActive) return;
@@ -116,22 +129,7 @@ export async function handleObsDisconnect(): Promise<void> {
     currentSource = 'fallback';
     const streamKey = await getStreamKeyDb() || 'preview';
 
-    // Load manual settings or use captured metadata
-    const res = await getSetting('fallback_resolution') || (lastObsMetadata?.width + 'x' + lastObsMetadata?.height) || '1920x1080';
-    const fps = await getSetting('fallback_fps') || String(lastObsMetadata?.fps || 60);
-    const bitrate = await getSetting('fallback_bitrate') || '6000';
-
-    const [w, h] = res.split('x').map(Number);
-    const manualMeta: ProbeResult = {
-        width: w || 1920,
-        height: h || 1080,
-        fps: parseInt(fps) || 60,
-        bitrate: parseInt(bitrate) || 6000,
-        sampleRate: lastObsMetadata?.sampleRate || 48000,
-        channels: lastObsMetadata?.channels || 2
-    };
-
-    startSource('fallback', activeVideo, streamKey, manualMeta);
+    startSource('fallback', activeVideo, streamKey);
 }
 
 export function getState(): { broadcastActive: boolean; currentSource: SourceType } {
