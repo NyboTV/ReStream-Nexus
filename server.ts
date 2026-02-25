@@ -8,7 +8,7 @@ import cookieParser from 'cookie-parser';
 import { WEB_PORT, NMS_HTTP_PORT } from './backend/lib/config';
 import { fetchPublicIp } from './backend/lib/ip';
 import { startMediaServer, getNmsInstance, getActiveStreams } from './backend/rtmp/media-server';
-import { handleObsConnect, handleObsDisconnect } from './backend/stream/manager';
+import { handleObsConnect, handleObsDisconnect, getState, events as managerEvents } from './backend/stream/manager';
 import { attachWebSocketServer } from './backend/ws/handler';
 import { getStreamKeyDb } from './backend/lib/db';
 import targetsRouter from './backend/api/targets';
@@ -82,15 +82,25 @@ const httpServer = http.createServer(app);
 // WebSocket Server (auth + state push)
 const wss = attachWebSocketServer(httpServer, obsState);
 
-// Helper to broadcast state after OBS connect/disconnect
-function broadcastObsState(): void {
-    const { broadcastToAll } = require('./backend/ws/handler');
-    // Reuse the wss directly via its clients
-    const payload = JSON.stringify({ type: 'STATE', payload: { obsConnected: obsState.value } });
+// Helper to broadcast state after OBS connect/disconnect or manager state change
+function broadcastFullState(): void {
+    const { getPublicIp } = require('./backend/lib/ip');
+    const payload = JSON.stringify({
+        type: 'STATE',
+        payload: {
+            obsConnected: obsState.value,
+            publicIp: getPublicIp(),
+            ...getState(),
+        }
+    });
     wss.clients.forEach((client: any) => {
         if (client.readyState === 1 /* OPEN */) client.send(payload);
     });
 }
+
+// Listen to manager events to sync UI
+managerEvents.on('started', broadcastFullState);
+managerEvents.on('stopped', broadcastFullState);
 
 // RTMP Server — bridges OBS publish/done events to the stream manager
 startMediaServer(
@@ -98,16 +108,16 @@ startMediaServer(
         const key = await getStreamKeyDb();
         if (streamPath === `/live/${key}`) {
             obsState.value = true;
-            handleObsConnect();
-            broadcastObsState();
+            await handleObsConnect();
+            broadcastFullState();
         }
     },
     async (streamPath) => {
         const key = await getStreamKeyDb();
         if (streamPath === `/live/${key}`) {
             obsState.value = false;
-            handleObsDisconnect();
-            broadcastObsState();
+            await handleObsDisconnect();
+            broadcastFullState();
         }
     }
 );
