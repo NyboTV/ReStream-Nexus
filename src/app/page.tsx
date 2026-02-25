@@ -5,6 +5,7 @@ import axios from 'axios'
 import Cookies from 'js-cookie'
 import { useTranslations, Lang } from '@/lib/i18n'
 import Header from '@/components/Header'
+import { useToast } from '@/components/Toast'
 
 
 export default function Dashboard() {
@@ -13,6 +14,7 @@ export default function Dashboard() {
     const [streamKey, setStreamKey] = useState('')
     const [showTutorial, setShowTutorial] = useState(false)
 
+    const { addToast } = useToast()
     const [state, setState] = useState({ obsConnected: false, broadcastActive: false, currentSource: null, publicIp: '' })
     const [targets, setTargets] = useState<any[]>([])
     const [videos, setVideos] = useState<string[]>([])
@@ -209,7 +211,7 @@ export default function Dashboard() {
             socket.send(message);
         } else {
             console.warn('[Dashboard] Cannot send: WebSocket is not ready.');
-            alert('WebSocket ist nicht bereit! Bitte lade die Seite neu, falls das Problem bestehen bleibt.\nStatus: ' + (socket ? socket.readyState : 'Keine Verbindung'));
+            addToast('WebSocket ist nicht bereit! Bitte lade die Seite neu, falls das Problem bestehen bleibt.\nStatus: ' + (socket ? socket.readyState : 'Keine Verbindung'), 'error');
         }
     }
 
@@ -245,9 +247,9 @@ export default function Dashboard() {
         setIsSavingQuality(true)
         try {
             await axios.post('/api/settings/fallback', qualitySettings)
-            alert(t('quality_saved'))
+            addToast(t('quality_saved'), 'success')
         } catch (e) {
-            alert('Error saving quality settings')
+            addToast('Error saving quality settings', 'error')
         } finally {
             setIsSavingQuality(false)
         }
