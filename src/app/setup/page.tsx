@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import Header from '@/components/Header'
 import { Lang, useTranslations } from '@/lib/i18n'
+import { useToast } from '@/components/Toast'
 
 // Steps: 1=Password, 2=KeyDisplay+OBS+Test, 3=Targets, 4=Video, 5=Finalizing
 type Step = 1 | 2 | 3 | 4 | 5
@@ -41,6 +42,7 @@ export default function SetupPage() {
     const [ready, setReady] = useState(false)
     const [lang, setLang] = useState<Lang>('de')
     const t = useTranslations(lang)
+    const { addToast } = useToast()
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
     const [pwError, setPwError] = useState('')
