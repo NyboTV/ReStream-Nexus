@@ -2,6 +2,8 @@ import './globals.css'
 import type { Metadata } from 'next'
 import { Outfit } from 'next/font/google'
 
+import { ToastProvider } from '@/components/Toast'
+
 const outfit = Outfit({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
@@ -19,7 +21,11 @@ export default function RootLayout({
 }) {
     return (
         <html lang="de">
-            <body className={outfit.className}>{children}</body>
+            <body className={outfit.className}>
+                <ToastProvider>
+                    {children}
+                </ToastProvider>
+            </body>
         </html>
     )
 }
