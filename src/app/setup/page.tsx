@@ -38,6 +38,7 @@ const setupCss = `
 
 export default function SetupPage() {
     const [step, setStep] = useState<Step>(1)
+    const [ready, setReady] = useState(false)
     const [lang, setLang] = useState<Lang>('de')
     const t = useTranslations(lang)
     const [password, setPassword] = useState('')
@@ -65,8 +66,9 @@ export default function SetupPage() {
                 if (data.setupComplete) { window.location.href = '/login'; return }
                 const s = data.currentStep as Step
                 if (s && s > 1) setStep(s)
+                setReady(true)
             })
-            .catch(() => { })
+            .catch(() => setReady(true))
 
         fetch('https://api.ipify.org?format=json')
             .then(r => r.json())
@@ -186,6 +188,12 @@ export default function SetupPage() {
         if (n === step) return 'active'
         return ''
     })
+
+    if (!ready) return (
+        <div className="app-container flex-center" style={{ height: '100vh' }}>
+            <div className="spinner" />
+        </div>
+    )
 
     return (
         <>
