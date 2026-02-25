@@ -352,59 +352,64 @@ export default function Dashboard() {
                                 </div>
                             </div>
 
-                            {/* Manual Quality Control Panel */}
-                            <div className="signal-card">
-                                <div className="text-muted mb-05 text-sm">{t('quality_settings')}</div>
-                                <div className="grid-form gap-05">
-                                    <div className="form-group mb-0">
-                                        <label className="text-xs">{t('resolution')}</label>
-                                        <select
-                                            value={qualitySettings.resolution}
-                                            onChange={(e) => setQualitySettings({ ...qualitySettings, resolution: e.target.value })}
-                                            className="form-control p-025 text-sm"
-                                            title={t('resolution')}
-                                        >
-                                            <option value="1920x1080">1920x1080 (FullHD)</option>
-                                            <option value="1280x720">1280x720 (HD)</option>
-                                            <option value="854x480">854x480 (480p)</option>
-                                        </select>
-                                    </div>
-                                    <div className="flex gap-05">
-                                        <div className="form-group mb-0 flex-1">
-                                            <label className="text-xs">{t('fps')}</label>
-                                            <input
-                                                type="number"
-                                                value={qualitySettings.fps}
-                                                onChange={(e) => setQualitySettings({ ...qualitySettings, fps: parseInt(e.target.value) })}
-                                                className="form-control p-025 text-sm"
-                                                title={t('fps')}
-                                            />
-                                        </div>
-                                        <div className="form-group mb-0 flex-1">
-                                            <label className="text-xs">{t('bitrate_k')}</label>
-                                            <input
-                                                type="number"
-                                                value={qualitySettings.bitrate}
-                                                step="500"
-                                                onChange={(e) => setQualitySettings({ ...qualitySettings, bitrate: parseInt(e.target.value) })}
-                                                className="form-control p-025 text-sm"
-                                                title={t('bitrate_k')}
-                                            />
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={handleSaveQuality}
-                                        disabled={isSavingQuality}
-                                        className="btn btn-primary p-04 text-xs mt-025 w-full"
-                                    >
-                                        {isSavingQuality ? '...' : t('save_quality')}
-                                    </button>
-                                    <div className="text-xs text-muted italic mt-025" style={{ fontSize: '0.65rem' }}>
-                                        {t('quality_hint')}
-                                    </div>
-                                </div>
-                            </div>
+                        </div>
 
+                        {/* Manual Quality Control Panel — Moved under the signals */}
+                        <div className="quality-control-panel-dashboard">
+                            <div className="text-muted mb-075 text-sm flex items-center gap-05">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                </svg>
+                                <span>{t('quality_settings')}</span>
+                            </div>
+                            <div className="grid-form gap-1 items-end">
+                                <div className="form-group mb-0">
+                                    <label className="text-xs">{t('resolution')}</label>
+                                    <select
+                                        value={qualitySettings.resolution}
+                                        onChange={(e) => setQualitySettings({ ...qualitySettings, resolution: e.target.value })}
+                                        className="form-control p-05 text-sm"
+                                        title={t('resolution')}
+                                    >
+                                        <option value="1920x1080">1920x1080 (FullHD)</option>
+                                        <option value="1280x720">1280x720 (HD)</option>
+                                        <option value="854x480">854x480 (480p)</option>
+                                    </select>
+                                </div>
+                                <div className="form-group mb-0">
+                                    <label className="text-xs">{t('fps')}</label>
+                                    <input
+                                        type="number"
+                                        value={qualitySettings.fps}
+                                        onChange={(e) => setQualitySettings({ ...qualitySettings, fps: parseInt(e.target.value) })}
+                                        className="form-control p-05 text-sm"
+                                        title={t('fps')}
+                                    />
+                                </div>
+                                <div className="form-group mb-0">
+                                    <label className="text-xs">{t('bitrate_k')}</label>
+                                    <input
+                                        type="number"
+                                        value={qualitySettings.bitrate}
+                                        step="500"
+                                        onChange={(e) => setQualitySettings({ ...qualitySettings, bitrate: parseInt(e.target.value) })}
+                                        className="form-control p-05 text-sm"
+                                        title={t('bitrate_k')}
+                                    />
+                                </div>
+                                <button
+                                    onClick={handleSaveQuality}
+                                    disabled={isSavingQuality}
+                                    className="btn btn-primary p-05 text-sm"
+                                    style={{ minWidth: '140px' }}
+                                >
+                                    {isSavingQuality ? '...' : t('save_quality')}
+                                </button>
+                            </div>
+                            <div className="text-xs text-muted italic mt-075">
+                                {t('quality_hint')}
+                            </div>
                         </div>
                     </section>
                 </div>
