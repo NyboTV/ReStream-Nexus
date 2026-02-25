@@ -13,7 +13,8 @@ let sourceProcess: ChildProcess | null = null;
 export function startSource(
     type: SourceType,
     fallbackVideoPath: string,
-    streamKey: string
+    streamKey: string,
+    settings?: { resolution: string; fps: number }
 ): void {
     killSource();
 
@@ -48,7 +49,8 @@ export function startSource(
             '-preset', 'veryfast',
             '-tune', 'zerolatency',
             '-crf', '18', // High quality, low overhead
-            '-g', '60',
+            '-crf', '18',
+            '-g', (settings?.fps ? settings.fps * 2 : 60).toString(),
             '-c:a', 'aac',
             '-f', 'flv',
             CANVAS_RTMP_URL
