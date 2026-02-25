@@ -4,18 +4,13 @@ import path from 'path';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 require('dotenv').config();
 
-// ─── Auth ────────────────────────────────────────────────────────────────────
-export const STREAM_KEY: string =
-    process.env.STREAM_KEY ?? 'SerienSkylan_StreamKey';
-
 // ─── Ports ───────────────────────────────────────────────────────────────────
 export const WEB_PORT = 3000;
 export const RTMP_PORT = 1935;
 export const NMS_HTTP_PORT = 8000; // Node-Media-Server stats API
 
 // ─── Internal Stream URLs ─────────────────────────────────────────────────────
-export const OBS_STREAM_URL = `rtmp://localhost:${RTMP_PORT}/live/${STREAM_KEY}`;
-export const CANVAS_UDP_URL = 'udp://127.0.0.1:10000';
+export const CANVAS_RTMP_URL = 'rtmp://127.0.0.1:1935/live/canvas';
 
 // ─── File Paths ───────────────────────────────────────────────────────────────
 // __dirname = <root>/backend/lib  →  resolve two levels up to get project root
