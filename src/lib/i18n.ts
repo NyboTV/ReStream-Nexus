@@ -70,7 +70,14 @@ export const translations = {
         platform_dlive: "DLive",
         platform_vk: "VK",
         platform_okru: "OK.ru",
-        platform_custom: "Custom"
+        platform_custom: "Custom",
+        quality_settings: "Qualitätseinstellungen",
+        resolution: "Auflösung",
+        fps: "FPS",
+        bitrate_k: "Bitrate (kbps)",
+        save_quality: "Qualität Speichern",
+        quality_hint: "Hinweis: Diese Einstellungen sollten synchron mit deinem OBS sein.",
+        quality_saved: "Qualität gespeichert!"
     },
     en: {
         system_status: "System-Status:", logout: "Logout", command_center: "Command Center",
@@ -140,7 +147,14 @@ export const translations = {
         platform_dlive: "DLive",
         platform_vk: "VK",
         platform_okru: "OK.ru",
-        platform_custom: "Custom"
+        platform_custom: "Custom",
+        quality_settings: "Quality Settings",
+        resolution: "Resolution",
+        fps: "FPS",
+        bitrate_k: "Bitrate (kbps)",
+        save_quality: "Save Quality",
+        quality_hint: "Note: These settings should be synced with your OBS.",
+        quality_saved: "Quality saved!"
     }
 }
 
