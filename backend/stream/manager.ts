@@ -1,20 +1,19 @@
 import path from 'path';
 import fs from 'fs';
 import { EventEmitter } from 'events';
-import { getSetting } from '../lib/db';
-import { VIDEOS_DIR, OBS_STREAM_URL } from '../lib/config';
+import { getSetting, getStreamKeyDb, Target } from '../lib/db';
+import { VIDEOS_DIR } from '../lib/config';
 import { probeStream } from './probe';
 import { startSource, killSource, SourceType } from './source';
 import { startMaster, killMaster, masterEvents } from './master';
-import { Target } from '../lib/db';
+import { ProbeResult } from './probe';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let broadcastActive = false;
 let currentSource: SourceType = 'fallback';
 let currentTargets: Target[] = [];
-let masterResolution = '1920x1080';
-let masterFps = 30;
 let activeVideo = path.join(VIDEOS_DIR, 'fallback.mp4');
+let lastObsMetadata: ProbeResult | null = null;
 
 export const events = new EventEmitter();
 
@@ -35,15 +34,26 @@ getSetting('active_video')
     })
     .catch((err) => console.error('[Manager] Error loading active_video setting:', err));
 
+async function captureObsMetadata(streamKey: string) {
+    console.log('[Manager] Probing OBS stream for settings mirroring...');
+    const obsUrl = `rtmp://localhost:1935/live/${streamKey}`;
+    const meta = await probeStream(obsUrl);
+    if (meta) {
+        console.log('[Manager] Captured OBS metadata:', meta);
+        lastObsMetadata = meta;
+    }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export function setActiveVideo(filepath: string): void {
+export async function setActiveVideo(filepath: string): Promise<void> {
     if (fs.existsSync(filepath)) {
         activeVideo = filepath;
         console.log('[Manager] Active fallback video set to:', activeVideo);
         // Hot-swap the source if we're currently in fallback mode
         if (broadcastActive && currentSource === 'fallback') {
-            startSource('fallback', activeVideo);
+            const streamKey = await getStreamKeyDb() || 'preview';
+            startSource('fallback', activeVideo, streamKey);
         }
     }
 }
@@ -55,20 +65,20 @@ export async function startBroadcast(targets: Target[], isObsConnected: boolean)
     currentTargets = targets ?? [];
     currentSource = isObsConnected ? 'obs' : 'fallback';
 
-    console.log('[Manager] Probing source resolution...');
-    const probeUrl = isObsConnected ? OBS_STREAM_URL : activeVideo;
-    const probeResult = await probeStream(probeUrl);
+    const streamKey = await getStreamKeyDb() || 'preview';
+    console.log('[Manager] Using streamKey:', streamKey);
 
-    if (probeResult) {
-        masterResolution = `${probeResult.width}x${probeResult.height}`;
-        masterFps = probeResult.fps;
-        console.log(`[Manager] Resolution: ${masterResolution} @ ${masterFps}fps`);
-    } else {
-        console.log(`[Manager] Probe failed — using defaults: ${masterResolution} @ ${masterFps}fps`);
+    // Ensure we have a valid video if in fallback mode
+    if (currentSource === 'fallback' && (!activeVideo || !fs.existsSync(activeVideo))) {
+        const files = fs.readdirSync(VIDEOS_DIR).filter(f => f.endsWith('.mp4'));
+        if (files.length > 0) {
+            activeVideo = path.join(VIDEOS_DIR, files[0]);
+            console.log('[Manager] Using backup fallback video:', files[0]);
+        }
     }
 
-    startMaster(currentTargets, masterResolution, masterFps);
-    startSource(currentSource, activeVideo);
+    startMaster(currentTargets);
+    startSource(currentSource, activeVideo, streamKey, lastObsMetadata);
 }
 
 export function stopBroadcast(): void {
@@ -88,19 +98,25 @@ export function updateTargets(targets: Target[]): void {
     }
 }
 
-export function handleObsConnect(): void {
-    if (!broadcastActive || currentSource === 'obs') return;
-    console.log('[Manager] OBS connected — seamlessly switching to OBS source...');
+export async function handleObsConnect(): Promise<void> {
     currentSource = 'obs';
+    const streamKey = await getStreamKeyDb() || 'preview';
+
+    // Capture metadata immediately regardless of broadcast state
+    captureObsMetadata(streamKey);
+
+    if (!broadcastActive) return;
+
     // Brief delay to let Node-Media-Server finish the RTMP handshake
-    setTimeout(() => startSource('obs', activeVideo), 500);
+    setTimeout(() => startSource('obs', activeVideo, streamKey), 1000);
 }
 
-export function handleObsDisconnect(): void {
+export async function handleObsDisconnect(): Promise<void> {
     if (!broadcastActive || currentSource === 'fallback') return;
     console.log('[Manager] OBS disconnected — seamlessly switching to fallback...');
     currentSource = 'fallback';
-    startSource('fallback', activeVideo);
+    const streamKey = await getStreamKeyDb() || 'preview';
+    startSource('fallback', activeVideo, streamKey, lastObsMetadata);
 }
 
 export function getState(): { broadcastActive: boolean; currentSource: SourceType } {
