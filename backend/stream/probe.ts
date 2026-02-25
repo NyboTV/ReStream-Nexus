@@ -10,6 +10,8 @@ export interface ProbeResult {
     width: number;
     height: number;
     fps: number;
+    sampleRate: number;
+    channels: number;
 }
 
 /**
@@ -22,6 +24,8 @@ export function probeStream(url: string): Promise<ProbeResult | null> {
             '-v', 'error',
             '-select_streams', 'v:0',
             '-show_entries', 'stream=width,height,r_frame_rate',
+            '-select_streams', 'a:0',
+            '-show_entries', 'stream=sample_rate,channels',
             '-of', 'json',
             url,
         ]);
@@ -33,17 +37,33 @@ export function probeStream(url: string): Promise<ProbeResult | null> {
             if (code !== 0) return resolve(null);
             try {
                 const data = JSON.parse(output) as {
-                    streams?: Array<{ width: number; height: number; r_frame_rate: string }>;
+                    streams?: Array<{
+                        width?: number;
+                        height?: number;
+                        r_frame_rate?: string;
+                        sample_rate?: string;
+                        channels?: number;
+                    }>;
                 };
-                const s = data.streams?.[0];
-                if (!s) return resolve(null);
+
+                const videoStream = data.streams?.find(s => s.width !== undefined);
+                const audioStream = data.streams?.find(s => s.sample_rate !== undefined);
+
+                if (!videoStream) return resolve(null);
 
                 let fps = 30;
-                if (s.r_frame_rate) {
-                    const [num, den] = s.r_frame_rate.split('/').map(Number);
+                if (videoStream.r_frame_rate) {
+                    const [num, den] = videoStream.r_frame_rate.split('/').map(Number);
                     if (den > 0) fps = Math.round(num / den);
                 }
-                resolve({ width: s.width, height: s.height, fps });
+
+                resolve({
+                    width: videoStream.width || 1920,
+                    height: videoStream.height || 1080,
+                    fps,
+                    sampleRate: audioStream?.sample_rate ? parseInt(audioStream.sample_rate) : 48000,
+                    channels: audioStream?.channels || 2,
+                });
             } catch {
                 resolve(null);
             }
