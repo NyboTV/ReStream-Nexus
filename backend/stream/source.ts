@@ -13,8 +13,7 @@ let sourceProcess: ChildProcess | null = null;
 export function startSource(
     type: SourceType,
     fallbackVideoPath: string,
-    streamKey: string,
-    metadata?: ProbeResult | null
+    streamKey: string
 ): void {
     killSource();
 
@@ -22,6 +21,7 @@ export function startSource(
 
     if (type === 'obs') {
         // Low-latency copy from local RTMP → UDP canvas
+        // We use -fflags nobuffer and -tune zerolatency even here to keep internal hops fast
         const obsUrl = `rtmp://localhost:1935/live/${streamKey}`;
         args.push(
             '-fflags', 'nobuffer',
@@ -35,37 +35,24 @@ export function startSource(
             CANVAS_RTMP_URL
         );
     } else {
-        // Fallback mode: Dynamic Transcoding to match OBS or simple copy
-        args.push('-stream_loop', '-1', '-re', '-i', fallbackVideoPath);
-
-        if (metadata) {
-            console.log(`[Source] Fallback active: Mirroring OBS settings (${metadata.width}x${metadata.height} @ ${metadata.fps}fps)`);
-            // Mirror OBS settings for a seamless transition
-            args.push(
-                '-vf', `scale=${metadata.width}:${metadata.height},fps=${metadata.fps}`,
-                '-c:v', 'libx264',
-                '-preset', 'veryfast',
-                '-tune', 'zerolatency',
-                '-b:v', (metadata as any).bitrate ? `${(metadata as any).bitrate}k` : '4000k',
-                '-maxrate', (metadata as any).bitrate ? `${(metadata as any).bitrate}k` : '4000k',
-                '-bufsize', (metadata as any).bitrate ? `${(metadata as any).bitrate * 2}k` : '8000k',
-                '-pix_fmt', 'yuv420p',
-                '-c:a', 'aac',
-                '-ar', metadata.sampleRate.toString(),
-                '-ac', metadata.channels.toString(),
-                '-b:a', '128k'
-            );
-        } else {
-            // No metadata (initial start) — use copy but ensure mapping
-            args.push(
-                '-map', '0:v:0',
-                '-map', '0:a:0?',
-                '-c:v', 'copy',
-                '-c:a', 'copy'
-            );
-        }
-
-        args.push('-f', 'flv', CANVAS_RTMP_URL);
+        // Fallback mode: Simplified high-quality mezzanine output
+        // The 'master' process now handles the final scaling/bitrate
+        args.push(
+            '-stream_loop', '-1',
+            '-re',
+            '-fflags', 'nobuffer',
+            '-i', fallbackVideoPath,
+            '-map', '0:v:0',
+            '-map', '0:a:0?',
+            '-c:v', 'libx264',
+            '-preset', 'veryfast',
+            '-tune', 'zerolatency',
+            '-crf', '18', // High quality, low overhead
+            '-g', '60',
+            '-c:a', 'aac',
+            '-f', 'flv',
+            CANVAS_RTMP_URL
+        );
     }
 
     console.log(`[Source] Spawning FFmpeg (${type}) → Canvas`);
