@@ -269,3 +269,20 @@ select.form-control option { background: var(--bg-dark); color: var(--text-main)
 }
 .broadcast-source-text { font-size: 0.9rem; margin-top: 0.75rem; font-weight: 500; }
 .server-ip-display { word-break: break-all; }
+.quality-control-panel-dashboard {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1.25rem;
+  margin-top: 1rem;
+}
+.quality-control-panel-dashboard .grid-form {
+  grid-template-columns: 2fr 1fr 1fr auto;
+  align-items: flex-end;
+  gap: 1rem;
+}
+@media (max-width: 768px) {
+  .quality-control-panel-dashboard .grid-form {
+    grid-template-columns: 1fr;
+  }
+}
