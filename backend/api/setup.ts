@@ -1,4 +1,3 @@
-```typescript
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
@@ -43,7 +42,7 @@ router.post('/stream-key', async (_req: Request, res: Response) => {
         // Reuse existing key if already generated (idempotent)
         let key = await getStreamKeyDb();
         if (!key) {
-            key = `nxs_${ randomBytes(16).toString('hex') } `;
+            key = `nxs_${randomBytes(16).toString('hex')}`;
             await setStreamKeyDb(key);
         }
         res.json({ success: true, streamKey: key });
@@ -90,8 +89,9 @@ router.post('/verify-password', async (req: Request, res: Response) => {
 // POST /api/setup/complete — finalize setup
 router.post('/complete', async (_req: Request, res: Response) => {
     try {
-        const complete = await isSetupComplete();
-        if (!complete) {
+        const passwordSet = !!(await getPasswordHash());
+        const keySet = !!(await getStreamKeyDb());
+        if (!passwordSet || !keySet) {
             return res.status(400).json({ error: 'Setup not complete (missing password or stream key)' }) as any;
         }
         await setSetupStep(5);
@@ -103,4 +103,3 @@ router.post('/complete', async (_req: Request, res: Response) => {
 });
 
 export default router;
-```
