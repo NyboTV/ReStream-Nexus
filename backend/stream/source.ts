@@ -9,6 +9,7 @@ const ffmpegPath: string = require('ffmpeg-static') as string;
 export type SourceType = 'obs' | 'fallback';
 
 let sourceProcess: ChildProcess | null = null;
+let oldSourceProcess: ChildProcess | null = null; // For graceful handoff
 
 export function startSource(
     type: SourceType,
@@ -16,7 +17,10 @@ export function startSource(
     streamKey: string,
     settings?: { resolution: string; fps: number }
 ): void {
-    killSource();
+    // Keep old process alive while starting new one (graceful handoff)
+    if (sourceProcess) {
+        oldSourceProcess = sourceProcess;
+    }
 
     const args: string[] = [];
 
@@ -57,10 +61,19 @@ export function startSource(
         );
     }
 
-    console.log(`[Source] Spawning FFmpeg (${type}) → Canvas`);
+    console.log(`[Source] Starting ${type === 'obs' ? '🔴 OBS' : '⚫ FALLBACK'} source → Canvas`);
     sourceProcess = spawn(ffmpegPath, args);
     sourceProcess.stderr?.on('data', (data) => console.log(`[Source FFmpeg] ${data.toString()}`));
     sourceProcess.on('error', (err) => console.error('[Source] FFmpeg error:', err));
+
+    // Kill old process after 1000ms (give new one time to fully connect and stabilize)
+    if (oldSourceProcess) {
+        setTimeout(() => {
+            console.log('[Source] Cleaning up old source process...');
+            try { oldSourceProcess?.kill('SIGTERM'); } catch { /* ignore */ }
+            oldSourceProcess = null;
+        }, 1000);
+    }
 }
 
 export function killSource(): void {
@@ -68,5 +81,9 @@ export function killSource(): void {
         console.log('[Source] Stopping source process (Soft Stop)...');
         try { sourceProcess.kill('SIGTERM'); } catch { /* ignore */ }
         sourceProcess = null;
+    }
+    if (oldSourceProcess) {
+        try { oldSourceProcess.kill('SIGTERM'); } catch { /* ignore */ }
+        oldSourceProcess = null;
     }
 }

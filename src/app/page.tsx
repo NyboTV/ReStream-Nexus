@@ -20,6 +20,7 @@ export default function Dashboard() {
     const [videos, setVideos] = useState<string[]>([])
     const [activeVideo, setActiveVideo] = useState('')
     const [wsConnected, setWsConnected] = useState(false)
+    const [manualFallbackActive, setManualFallbackActive] = useState(false)
 
     // Realtime Polling
     const [obsStats, setObsStats] = useState({ bitrate: 0, fps: 0, width: 0, height: 0 })
@@ -67,6 +68,10 @@ export default function Dashboard() {
                     fetchTargets()
                     fetchVideos()
                     fetchQualitySettings()
+                    // Check initial fallback status
+                    axios.get('/api/targets/fallback/status', { headers: { 'x-stream-key': cookieKey } })
+                        .then(({ data }) => setManualFallbackActive(data.active))
+                        .catch(() => setManualFallbackActive(false))
                     if (!localStorage.getItem('tutorial_shown')) {
                         setShowTutorial(true)
                         localStorage.setItem('tutorial_shown', '1')
@@ -222,9 +227,9 @@ export default function Dashboard() {
     }
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files?.length) return
+        if (!(e.target as HTMLInputElement).files?.length) return
         const formData = new FormData()
-        formData.append('video', e.target.files[0])
+        formData.append('video', (e.target as HTMLInputElement).files![0])
         try {
             await axios.post('/api/videos/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
             fetchVideos()
@@ -236,6 +241,23 @@ export default function Dashboard() {
     const handleSetLoop = async (file: string) => {
         await axios.post('/api/videos/active', { filename: file })
         fetchVideos()
+    }
+
+    const handleToggleManualFallback = async () => {
+        try {
+            if (manualFallbackActive) {
+                await axios.post('/api/targets/fallback/stop', {}, { headers: { 'x-stream-key': streamKey } })
+                setManualFallbackActive(false)
+                addToast('🔧 Fallback deaktiviert', 'info')
+            } else {
+                await axios.post('/api/targets/fallback/start', {}, { headers: { 'x-stream-key': streamKey } })
+                setManualFallbackActive(true)
+                addToast('🔧 Fallback aktiviert', 'info')
+            }
+        } catch (err) {
+            console.error(err)
+            addToast('Fehler beim Fallback-Toggle', 'error')
+        }
     }
 
     const handleDeleteVideo = async (file: string) => {
@@ -370,7 +392,7 @@ export default function Dashboard() {
                                     <label className="text-xs">{t('resolution')}</label>
                                     <select
                                         value={qualitySettings.resolution}
-                                        onChange={(e) => setQualitySettings({ ...qualitySettings, resolution: e.target.value })}
+                                        onChange={(e) => setQualitySettings({ ...qualitySettings, resolution: (e.target as HTMLSelectElement).value })}
                                         className="form-control p-05 text-sm"
                                         title={t('resolution')}
                                     >
@@ -384,7 +406,7 @@ export default function Dashboard() {
                                     <input
                                         type="number"
                                         value={qualitySettings.fps}
-                                        onChange={(e) => setQualitySettings({ ...qualitySettings, fps: parseInt(e.target.value) })}
+                                        onChange={(e) => setQualitySettings({ ...qualitySettings, fps: parseInt((e.target as HTMLInputElement).value) })}
                                         className="form-control p-05 text-sm"
                                         title={t('fps')}
                                     />
@@ -395,7 +417,7 @@ export default function Dashboard() {
                                         type="number"
                                         value={qualitySettings.bitrate}
                                         step="500"
-                                        onChange={(e) => setQualitySettings({ ...qualitySettings, bitrate: parseInt(e.target.value) })}
+                                        onChange={(e) => setQualitySettings({ ...qualitySettings, bitrate: parseInt((e.target as HTMLInputElement).value) })}
                                         className="form-control p-05 text-sm"
                                         title={t('bitrate_k')}
                                     />
@@ -454,6 +476,17 @@ export default function Dashboard() {
                                     <span>{t('media_library')}</span>
                                 </button>
                             </div>
+
+                            {/* Fallback Control Button - Only show when broadcast is active */}
+                            {state.broadcastActive && (
+                                <button
+                                    onClick={handleToggleManualFallback}
+                                    className={`btn text-sm p-075 mt-1 w-full ${manualFallbackActive ? 'btn-danger' : 'btn-success'}`}
+                                    title={manualFallbackActive ? 'Fallback deaktivieren' : 'Fallback aktivieren'}
+                                >
+                                    {manualFallbackActive ? '⚫ Fallback aktiv (Video läuft)' : '🔧 Fallback testen'}
+                                </button>
+                            )}
                         </div>
                     </section>
 
@@ -568,7 +601,7 @@ export default function Dashboard() {
                                 <select
                                     value={newTargetName}
                                     onChange={(e) => {
-                                        const p = e.target.value
+                                        const p = (e.target as HTMLSelectElement).value
                                         setNewTargetName(p)
                                         const map: Record<string, string> = {
                                             Twitch: 'rtmp://live.twitch.tv/app',
@@ -592,11 +625,11 @@ export default function Dashboard() {
                             </div>
                             <div className="form-group mb-0">
                                 <label>{t('rtmp_server_url')}</label>
-                                <input required type="text" value={newTargetUrl} onChange={(e) => setNewTargetUrl(e.target.value)} className="form-control" placeholder="rtmp://" disabled={newTargetName !== 'Custom'} />
+                                <input required type="text" value={newTargetUrl} onChange={(e) => setNewTargetUrl((e.target as HTMLInputElement).value)} className="form-control" placeholder="rtmp://" disabled={newTargetName !== 'Custom'} />
                             </div>
                             <div className="form-group mb-0">
                                 <label>{t('stream_key_label')}</label>
-                                <input required type="password" value={newTargetKey} onChange={(e) => setNewTargetKey(e.target.value)} className="form-control" placeholder="live_" />
+                                <input required type="password" value={newTargetKey} onChange={(e) => setNewTargetKey((e.target as HTMLInputElement).value)} className="form-control" placeholder="live_" />
                             </div>
                             <button type="submit" className="btn btn-primary p-075" title="Ziel Hinzufügen">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>

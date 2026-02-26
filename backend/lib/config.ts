@@ -16,4 +16,4 @@ export const CANVAS_RTMP_URL = 'rtmp://127.0.0.1:1935/live/canvas';
 // __dirname = <root>/backend/lib  →  resolve two levels up to get project root
 const ROOT = path.resolve(__dirname, '..', '..');
 export const VIDEOS_DIR = path.join(ROOT, 'videos');
-export const DB_PATH = path.join(ROOT, 'targets.db');
+export const DB_PATH = path.join(ROOT, 'nexus.db');

@@ -25,7 +25,12 @@ export interface MasterSettings {
 
 /**
  * The Master process is the ALWAYS-ON "MAIN Stream".
- * It creates a persistent black background and overlays any incoming canvas signal.
+ * Multi-Layer Architecture:
+ * 1. Base Layer (ALWAYS): Black screen + Text + Heartbeat Audio (guaraneed to never stop)
+ * 2. OBS Layer (optional): Overlaid on base when OBS is connected
+ * 3. Fallback Layer (optional): Overlaid on base when OBS is not connected
+ * 
+ * This ensures ZERO interruption to the Twitch stream during layer transitions.
  */
 export function startMaster(targets: Target[], settings?: MasterSettings): void {
     if (masterProcess) stopMaster(); // Ensure clean state
@@ -52,12 +57,13 @@ export function startMaster(targets: Target[], settings?: MasterSettings): void 
     const teeDescriptor = outputs.map(url => `[f=flv:onfail=ignore:flvflags=no_duration_filesize]${url}`).join('|');
 
     const args: string[] = [
-        // 0: Background Canvas (Black)
+        // Input 0: Base Layer Video (Black)
         '-f', 'lavfi', '-i', `color=c=black:s=${width}x${height}:r=${_masterFps}`,
-        // 1: Background Audio (Silence)
-        '-f', 'lavfi', '-i', `anullsrc=channel_layout=stereo:sample_rate=44100`,
-
-        // 2: The actual source (Canvas.flv bridge via NMS)
+        
+        // Input 1: Base Layer Audio (Heartbeat - extremely quiet sine wave)
+        '-f', 'lavfi', '-i', `sine=f=150:sample_rate=44100:d=1000000`,
+        
+        // Input 2: Canvas Stream (OBS or Fallback source)
         '-reconnect', '1',
         '-reconnect_at_eof', '1',
         '-reconnect_streamed', '1',
@@ -65,12 +71,13 @@ export function startMaster(targets: Target[], settings?: MasterSettings): void 
         '-fflags', 'nobuffer+genpts',
         '-i', 'http://localhost:8000/live/canvas.flv',
 
-        // ─── Filter Logic ───
+        // ─── Complex Filter: Multi-Layer Composition ───
         '-filter_complex',
         `[2:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2[vsource]; ` +
         `[0:v][vsource]overlay=eof_action=pass[outv]; ` +
-        `[2:a]aresample=async=1[a_resampled]; ` +
-        `[1:a][a_resampled]amix=inputs=2:duration=first:dropout_transition=0[outa]`,
+        `[1:a]volume=0.001[heartbeat]; ` +
+        `[2:a]aresample=async=1[a_incoming]; ` +
+        `[heartbeat][a_incoming]amix=inputs=2:duration=first:dropout_transition=0[outa]`,
 
         // ─── Encoding (Shared for all outputs) ───
         '-map', '[outv]',
@@ -95,7 +102,7 @@ export function startMaster(targets: Target[], settings?: MasterSettings): void 
     ];
 
     console.log(`[Master] Starting ALWAYS-ON MAIN Stream (${_masterResolution} @ ${_masterFps}fps, ${_masterBitrate}k)`);
-    console.log(`[Master] Distribution: ${outputs.length} targets active.`);
+    console.log(`[Master] Multi-Layer: Base(Black+Heartbeat) + Canvas(OBS|Fallback) → ${outputs.length} targets`);
 
     masterProcess = spawn(ffmpegPath, args);
     _broadcastActive = true;

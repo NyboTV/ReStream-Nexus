@@ -115,6 +115,7 @@ export async function handleObsConnect(): Promise<void> {
     currentSource = 'obs';
     const streamKey = await getStreamKeyDb() || 'preview';
 
+    console.log('[Manager] 🔴 OBS CONNECTED → Switching to Live OBS Feed');
     // Metadata capture is less critical now as master handles output format
     captureObsMetadata(streamKey);
 
@@ -127,7 +128,7 @@ export async function handleObsConnect(): Promise<void> {
 
 export async function handleObsDisconnect(): Promise<void> {
     if (!broadcastActive || currentSource === 'fallback') return;
-    console.log('[Manager] OBS disconnected — seamlessly switching to fallback...');
+    console.log('[Manager] ⚫ OBS DISCONNECTED → Falling back to Loop Video');
     currentSource = 'fallback';
     const streamKey = await getStreamKeyDb() || 'preview';
 
@@ -137,4 +138,48 @@ export async function handleObsDisconnect(): Promise<void> {
 
 export function getState(): { broadcastActive: boolean; currentSource: SourceType } {
     return { broadcastActive, currentSource };
+}
+
+// ─── Manual Fallback Control (for testing) ───────────────────────────────────
+let manualFallbackActive = false;
+
+export async function startManualFallback(): Promise<void> {
+    if (!broadcastActive) {
+        console.log('[Manager] Cannot start manual fallback - broadcast not active');
+        return;
+    }
+    if (manualFallbackActive) {
+        console.log('[Manager] Manual fallback already active');
+        return;
+    }
+
+    manualFallbackActive = true;
+    currentSource = 'fallback';
+    const streamKey = await getStreamKeyDb() || 'preview';
+    const mSettings = await getMasterSettings();
+    
+    console.log('[Manager] 🔧 MANUAL FALLBACK ENABLED (for testing)');
+    startSource('fallback', activeVideo, streamKey, mSettings);
+    events.emit('fallback-status', { manualFallbackActive });
+}
+
+export async function stopManualFallback(): Promise<void> {
+    if (!manualFallbackActive) {
+        console.log('[Manager] Manual fallback not active');
+        return;
+    }
+
+    manualFallbackActive = false;
+    
+    // Only switch back if OBS is available
+    const streamKey = await getStreamKeyDb() || 'preview';
+    const mSettings = await getMasterSettings();
+    
+    // This will show the base layer (black + heartbeat) until OBS connects
+    console.log('[Manager] 🔧 MANUAL FALLBACK DISABLED (showing base layer)');
+    events.emit('fallback-status', { manualFallbackActive });
+}
+
+export function getManualFallbackStatus(): boolean {
+    return manualFallbackActive;
 }

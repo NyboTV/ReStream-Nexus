@@ -158,9 +158,9 @@ export default function SetupPage() {
     const platforms = Object.keys(platformMap)
 
     const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files?.length) return
+        if (!(e.target as HTMLInputElement).files?.length) return
         const fd = new FormData()
-        fd.append('video', e.target.files[0])
+        fd.append('video', (e.target as HTMLInputElement).files![0])
         await axios.post('/api/videos/upload', fd, {
             headers: { 'Content-Type': 'multipart/form-data', 'x-stream-key': streamKey }
         })
@@ -217,14 +217,14 @@ export default function SetupPage() {
                                 <div className="form-group">
                                     <label>{t('setup_password')}</label>
                                     <input type="password" className="form-control" value={password}
-                                        onChange={e => { setPassword(e.target.value); setPwError('') }}
+                                        onChange={e => { setPassword((e.target as HTMLInputElement).value); setPwError('') }}
                                         onKeyDown={e => e.key === 'Enter' && handleSetPassword()}
                                         placeholder={t('setup_password_placeholder')} autoFocus />
                                 </div>
                                 <div className="form-group">
                                     <label>{t('setup_password_confirm')}</label>
                                     <input type="password" className="form-control" value={confirmPassword}
-                                        onChange={e => { setConfirmPassword(e.target.value); setPwError('') }}
+                                        onChange={e => { setConfirmPassword((e.target as HTMLInputElement).value); setPwError('') }}
                                         onKeyDown={e => e.key === 'Enter' && handleSetPassword()}
                                         placeholder={t('setup_password_repeat')} />
                                 </div>
@@ -292,14 +292,14 @@ export default function SetupPage() {
                                 <div className="flex-col gap-05 mb-1">
                                     <select title={t('platform')} className="form-control" value={addingTarget.name}
                                         onChange={e => {
-                                            setAddingTarget(a => ({ ...a, name: e.target.value, url: platformMap[e.target.value] || '' }))
+                                            setAddingTarget(a => ({ ...a, name: (e.target as HTMLSelectElement).value, url: platformMap[(e.target as HTMLSelectElement).value] || '' }))
                                         }}>
                                         {platforms.map(p => <option key={p} value={p}>{t(`platform_${p.toLowerCase().replace('.', '')}` as any)}</option>)}
                                     </select>
                                     <input className="form-control" placeholder={t('rtmp_server_url')} value={addingTarget.url}
-                                        onChange={e => setAddingTarget(a => ({ ...a, url: e.target.value }))} />
+                                        onChange={e => setAddingTarget(a => ({ ...a, url: (e.target as HTMLInputElement).value }))} />
                                     <input className="form-control" placeholder={t('stream_key_label')} value={addingTarget.key}
-                                        onChange={e => setAddingTarget(a => ({ ...a, key: e.target.value }))} />
+                                        onChange={e => setAddingTarget(a => ({ ...a, key: (e.target as HTMLInputElement).value }))} />
                                     <button className="btn btn-primary" onClick={handleAddTarget}>{t('setup_add_target')}</button>
                                 </div>
 

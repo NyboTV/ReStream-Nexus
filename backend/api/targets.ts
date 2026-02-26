@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getTargets, addTarget, removeTarget, updateTargetStatus, getEnabledTargets } from '../lib/db';
-import { updateTargets } from '../stream/manager';
+import { updateTargets, startManualFallback, stopManualFallback, getManualFallbackStatus } from '../stream/manager';
 
 const router = Router();
 
@@ -38,6 +38,29 @@ router.delete('/:id', async (req: Request, res: Response) => {
         await removeTarget(Number(req.params.id));
         updateTargets(await getEnabledTargets());
         res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Fallback Testing Controls ───
+router.get('/fallback/status', async (req: Request, res: Response) => {
+    res.json({ active: getManualFallbackStatus() });
+});
+
+router.post('/fallback/start', async (req: Request, res: Response) => {
+    try {
+        await startManualFallback();
+        res.json({ success: true, active: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/fallback/stop', async (req: Request, res: Response) => {
+    try {
+        await stopManualFallback();
+        res.json({ success: true, active: false });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
     }
