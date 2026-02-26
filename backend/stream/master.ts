@@ -57,52 +57,44 @@ export function startMaster(targets: Target[], settings?: MasterSettings): void 
     const teeDescriptor = outputs.map(url => `[f=flv:onfail=ignore:flvflags=no_duration_filesize]${url}`).join('|');
 
     const args: string[] = [
-        // Input 0: Base Layer Video (Black)
+        // Input 0: OBS/Fallback Source Stream (via RTMP)
+        '-rtbufsize', '16M',
+        '-fflags', 'nobuffer',
+        '-flags', 'low_delay',
+        '-i', 'rtmp://localhost:1935/live/input',
+
+        // Input 1: Fallback black screen (if input fails)
         '-f', 'lavfi', '-i', `color=c=black:s=${width}x${height}:r=${_masterFps}`,
-        
-        // Input 1: Base Layer Audio (Heartbeat - extremely quiet sine wave)
-        '-f', 'lavfi', '-i', `sine=f=150:sample_rate=44100:d=1000000`,
-        
-        // Input 2: Canvas Stream (OBS or Fallback source)
-        '-reconnect', '1',
-        '-reconnect_at_eof', '1',
-        '-reconnect_streamed', '1',
-        '-reconnect_delay_max', '2',
-        '-fflags', 'nobuffer+genpts',
-        '-i', 'http://localhost:8000/live/canvas.flv',
 
-        // ─── Complex Filter: Multi-Layer Composition ───
-        '-filter_complex',
-        `[2:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2[vsource]; ` +
-        `[0:v][vsource]overlay=eof_action=pass[outv]; ` +
-        `[1:a]volume=0.001[heartbeat]; ` +
-        `[2:a]aresample=async=1[a_incoming]; ` +
-        `[heartbeat][a_incoming]amix=inputs=2:duration=first:dropout_transition=0[outa]`,
+        // ─── Direct map with fallback ───
+        '-map', '0:v?',
+        '-map', '1:v',
+        '-map', '0:a?',
+        '-filter_complex', '[0:v]format=pix_fmts=yuv420p[vout]',
+        '-map', '[vout]',
 
-        // ─── Encoding (Shared for all outputs) ───
-        '-map', '[outv]',
-        '-map', '[outa]',
+        // ─── Encoding: Low latency ───
         '-c:v', 'libx264',
-        '-preset', 'veryfast',
+        '-preset', 'ultrafast',
         '-tune', 'zerolatency',
+        '-crf', '23',
         '-b:v', `${_masterBitrate}k`,
-        '-maxrate', `${_masterBitrate}k`,
-        '-bufsize', `${_masterBitrate}k`,
-        '-g', (_masterFps * 2).toString(), // 2s GOP
-        '-pix_fmt', 'yuv420p',
+        '-maxrate', `${Math.floor(_masterBitrate * 1.2)}k`,
+        '-bufsize', `${Math.floor(_masterBitrate / 2)}k`,
+        '-g', '30',
         '-c:a', 'aac',
         '-b:a', '128k',
-        '-ar', '44100',
-        '-ac', '2',
+        '-shortest',
 
-        // ─── Distribution (Tee Muxer) ───
+        // ─── Distribution ───
         '-f', 'tee',
-        '-use_fifo', '1', // Protects the main process from slow slaves
+        '-max_delay', '2000000',
         teeDescriptor
     ];
 
     console.log(`[Master] Starting ALWAYS-ON MAIN Stream (${_masterResolution} @ ${_masterFps}fps, ${_masterBitrate}k)`);
-    console.log(`[Master] Multi-Layer: Base(Black+Heartbeat) + Canvas(OBS|Fallback) → ${outputs.length} targets`);
+    console.log(`[Master] Reading from: rtmp://localhost:1935/live/input (Base Input | OBS | Fallback)`);
+    console.log(`[Master] Outputs: ${outputs.length} targets (Twitch, etc.)`);
 
     masterProcess = spawn(ffmpegPath, args);
     _broadcastActive = true;
