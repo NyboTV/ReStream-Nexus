@@ -2,142 +2,117 @@ import { spawn, ChildProcess } from 'child_process';
 
 // ffmpeg-static exports a string path as default
 // eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffmpegPath: string = require('ffmpeg-static') as string;
 
 export type SourceType = 'obs' | 'fallback';
 
 let sourceProcess: ChildProcess | null = null;
-let oldSourceProcess: ChildProcess | null = null; // For graceful handoff (1000ms)
-let baseInputProcess: ChildProcess | null = null; // Fallback black frames to input stream
-
-/**
- * Start base input stream (black frames)
- * This ensures Master always has input to read from rtmp://localhost:1935/live/input
- * Gets replaced when real OBS/Fallback source starts
- */
-export function startBaseInputStream(width: number, height: number, fps: number): void {
-    if (baseInputProcess) return;
-
-    console.log(`[Input] Starting base input stream (black @ ${width}x${height} ${fps}fps)`);
-
-    const args = [
-        '-f', 'lavfi', '-i', `color=c=black:s=${width}x${height}:r=${fps}`,
-        '-f', 'lavfi', '-i', `anullsrc=channel_layout=stereo:sample_rate=44100`,
-        '-map', '0:v:0',
-        '-map', '1:a:0',
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-tune', 'zerolatency',
-        '-pix_fmt', 'yuv420p',
-        '-c:a', 'aac',
-        '-f', 'flv',
-        'rtmp://localhost:1935/live/input'
-    ];
-
-    baseInputProcess = spawn(ffmpegPath, args);
-    baseInputProcess.stderr?.on('data', (data) => {
-        const msg = data.toString();
-        if (msg.toLowerCase().includes('error')) {
-            console.log(`[Input FFmpeg] ${msg.trim()}`);
-        }
-    });
-    baseInputProcess.on('error', (err) => console.error('[Input] FFmpeg error:', err));
-}
-
-export function killBaseInputStream(): void {
-    if (baseInputProcess) {
-        console.log('[Input] Stopping base input stream...');
-        try { baseInputProcess.kill('SIGTERM'); } catch { /* ignore */ }
-        baseInputProcess = null;
-    }
-}
+let baseInputProcess: ChildProcess | null = null;
 
 /**
  * Start OBS or Fallback source
- * Output MUST be 1920x1080 so Master can do direct copy
+ * Output is piped to stdout (pipe:1) which the Manager will feed into the Buffer and then Master.
  */
 export function startSource(
     type: SourceType,
     fallbackVideoPath: string,
     streamKey: string,
-    settings?: { resolution: string; fps: number }
+    settings: { resolution: string; fps: number; bitrate: number }
 ): void {
-    // Keep old process alive while starting new one (graceful 1000ms handoff)
+    // Kill existing source immediately to avoid stream corruption in the relay
     if (sourceProcess) {
-        oldSourceProcess = sourceProcess;
+        killSource();
     }
 
     const args: string[] = [];
-    const inputStream = 'rtmp://localhost:1935/live/input';
-    const [width, height] = (settings?.resolution || '1920x1080').split('x').map(Number);
-    const fps = settings?.fps || 60;
+    const [width, height] = settings.resolution.split('x').map(Number);
+    const fps = settings.fps;
+    const bitrate = settings.bitrate;
 
     if (type === 'obs') {
-        // OBS source: Relay from OBS RTMP to input endpoint
-        // Assume OBS is already outputting in correct format
         const obsUrl = `rtmp://localhost:1935/live/${streamKey}`;
         args.push(
-            '-fflags', 'nobuffer',
+            '-loglevel', 'warning',
+            '-probesize', '100000000',
+            '-analyzeduration', '100000000',
+            '-fflags', 'nobuffer+genpts+igndts',
             '-flags', 'low_delay',
             '-i', obsUrl,
             '-map', '0:v:0',
-            '-map', '0:a:0?',
-            '-c:v', 'copy',
-            '-c:a', 'copy',
+            '-map', '0:a?',
+            '-c', 'copy',
             '-f', 'flv',
-            inputStream
+            '-flvflags', 'no_duration_filesize',
+            'pipe:1'
         );
     } else {
-        // Fallback source: Scale to 1920x1080 then stream to input
         args.push(
+            '-loglevel', 'warning',
+            '-fflags', 'nobuffer',
+            '-flags', 'low_delay',
             '-stream_loop', '-1',
             '-re',
-            '-fflags', 'nobuffer',
             '-i', fallbackVideoPath,
             '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,fps=${fps}`,
+            '-map', '0:v:0',
             '-map', '0:a:0?',
             '-c:v', 'libx264',
             '-preset', 'ultrafast',
             '-tune', 'zerolatency',
-            '-crf', '28',
+            '-b:v', `${bitrate}k`,
+            '-maxrate', `${bitrate}k`,
+            '-bufsize', `${bitrate / 4}k`, // Smaller bufsize for lower latency
+            '-pix_fmt', 'yuv420p',
             '-c:a', 'aac',
+            '-b:a', '128k',
             '-f', 'flv',
-            inputStream
+            '-flvflags', 'no_duration_filesize',
+            'pipe:1'
         );
     }
 
-    console.log(`[Source] Starting ${type === 'obs' ? '🔴 OBS' : '⚫ FALLBACK'} → rtmp://localhost:1935/live/input`);
+    console.log(`[Source] Starting ${type === 'obs' ? '🔴 OBS' : '⚫ FALLBACK'} relay to stdout`);
     sourceProcess = spawn(ffmpegPath, args);
-    sourceProcess.stderr?.on('data', (data) => console.log(`[Source FFmpeg] ${data.toString()}`));
-    sourceProcess.on('error', (err) => console.error('[Source] FFmpeg error:', err));
 
-    // Kill base input stream after 500ms delay (gives source time to connect)
-    setTimeout(() => {
-        if (baseInputProcess) {
-            console.log('[Source] Base input stopping (real source connected)...');
-            killBaseInputStream();
+    sourceProcess.stderr?.on('data', (data) => {
+        const msg = data.toString();
+        if (msg.toLowerCase().includes('error')) {
+            console.log(`[Source FFmpeg Error] ${msg.trim()}`);
         }
-    }, 500);
+    });
 
-    // Kill old process after 1000ms (give new one time to stabilize)
-    if (oldSourceProcess) {
-        setTimeout(() => {
-            console.log('[Source] Killing old source process (graceful handoff complete)...');
-            try { oldSourceProcess?.kill('SIGTERM'); } catch { /* ignore */ }
-            oldSourceProcess = null;
-        }, 1000);
-    }
+    sourceProcess.on('error', (err) => console.error('[Source] FFmpeg error:', err));
+}
+
+export function getSourceStdout() {
+    return sourceProcess?.stdout || null;
 }
 
 export function killSource(): void {
     if (sourceProcess) {
         console.log('[Source] Stopping source...');
-        try { sourceProcess.kill('SIGTERM'); } catch { /* ignore */ }
+        try { sourceProcess.kill('SIGKILL'); } catch { /* ignore */ }
         sourceProcess = null;
     }
-    if (oldSourceProcess) {
-        try { oldSourceProcess.kill('SIGTERM'); } catch { /* ignore */ }
-        oldSourceProcess = null;
+}
+
+export function startBaseInputStream(width: number, height: number, fps: number): void {
+    if (baseInputProcess) return;
+    const args = [
+        '-f', 'lavfi', '-i', `color=c=black:s=${width}x${height}:r=${fps}`,
+        '-f', 'lavfi', '-i', `anullsrc=channel_layout=stereo:sample_rate=44100`,
+        '-map', '0:v:0', '-map', '1:a:0',
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-f', 'flv', 'rtmp://localhost:1935/live/input'
+    ];
+    baseInputProcess = spawn(ffmpegPath, args);
+}
+
+export function killBaseInputStream(): void {
+    if (baseInputProcess) {
+        try { baseInputProcess.kill('SIGKILL'); } catch { /* ignore */ }
+        baseInputProcess = null;
     }
 }
 

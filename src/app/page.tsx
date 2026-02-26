@@ -36,6 +36,9 @@ export default function Dashboard() {
     const [newTargetUrl, setNewTargetUrl] = useState('rtmp://live.twitch.tv/app')
     const [newTargetKey, setNewTargetKey] = useState('')
 
+    const [bufferDuration, setBufferDuration] = useState(1.5)
+    const [autoFallback, setAutoFallback] = useState(true)
+
     const wsRef = useRef<WebSocket | null>(null)
     const t = useTranslations(lang)
 
@@ -67,11 +70,7 @@ export default function Dashboard() {
                     connectWs(cookieKey)
                     fetchTargets()
                     fetchVideos()
-                    fetchQualitySettings()
-                    // Check initial fallback status
-                    axios.get('/api/targets/fallback/status', { headers: { 'x-stream-key': cookieKey } })
-                        .then(({ data }) => setManualFallbackActive(data.active))
-                        .catch(() => setManualFallbackActive(false))
+                    fetchSettings()
                     if (!localStorage.getItem('tutorial_shown')) {
                         setShowTutorial(true)
                         localStorage.setItem('tutorial_shown', '1')
@@ -150,10 +149,15 @@ export default function Dashboard() {
         } catch (e) { }
     }
 
-    const fetchQualitySettings = async () => {
+    const fetchSettings = async () => {
         try {
             const { data } = await axios.get('/api/settings/fallback')
-            if (data) setQualitySettings(data)
+            if (data) {
+                setQualitySettings(data)
+                // New settings
+                if (data.buffer_duration) setBufferDuration(parseFloat(data.buffer_duration))
+                if (data.auto_fallback !== undefined) setAutoFallback(data.auto_fallback === '1')
+            }
         } catch (e) { }
     }
 
@@ -205,18 +209,11 @@ export default function Dashboard() {
         const socket = wsRef.current;
         const isReady = socket && socket.readyState === WebSocket.OPEN;
 
-        console.log('[Dashboard] Toggle Broadcast clicked');
-        console.log('[Dashboard] Current state.broadcastActive:', state.broadcastActive);
-        console.log('[Dashboard] WebSocket state (React):', wsConnected ? 'Connected' : 'Disconnected');
-        console.log('[Dashboard] WebSocket actual (Native):', socket ? (socket.readyState === 1 ? 'OPEN' : socket.readyState) : 'NULL');
-
         if (socket && isReady) {
             const message = JSON.stringify({ type: state.broadcastActive ? 'STOP_BROADCAST' : 'START_BROADCAST' });
-            console.log('[Dashboard] Sending message:', message);
             socket.send(message);
         } else {
-            console.warn('[Dashboard] Cannot send: WebSocket is not ready.');
-            addToast('WebSocket ist nicht bereit! Bitte lade die Seite neu, falls das Problem bestehen bleibt.\nStatus: ' + (socket ? socket.readyState : 'Keine Verbindung'), 'error');
+            addToast('WebSocket ist nicht bereit!', 'error');
         }
     }
 
@@ -243,35 +240,23 @@ export default function Dashboard() {
         fetchVideos()
     }
 
-    const handleToggleManualFallback = async () => {
-        try {
-            if (manualFallbackActive) {
-                await axios.post('/api/targets/fallback/stop', {}, { headers: { 'x-stream-key': streamKey } })
-                setManualFallbackActive(false)
-                addToast('🔧 Fallback deaktiviert', 'info')
-            } else {
-                await axios.post('/api/targets/fallback/start', {}, { headers: { 'x-stream-key': streamKey } })
-                setManualFallbackActive(true)
-                addToast('🔧 Fallback aktiviert', 'info')
-            }
-        } catch (err) {
-            console.error(err)
-            addToast('Fehler beim Fallback-Toggle', 'error')
-        }
-    }
 
     const handleDeleteVideo = async (file: string) => {
         await axios.delete(`/api/videos/${file}`)
         fetchVideos()
     }
 
-    const handleSaveQuality = async () => {
+    const handleSaveSettings = async () => {
         setIsSavingQuality(true)
         try {
-            await axios.post('/api/settings/fallback', qualitySettings)
-            addToast(t('quality_saved'), 'success')
+            await axios.post('/api/settings/fallback', {
+                ...qualitySettings,
+                buffer_duration: bufferDuration.toString(),
+                auto_fallback: autoFallback ? '1' : '0'
+            })
+            addToast('Einstellungen erfolgreich gespeichert', 'success')
         } catch (e) {
-            addToast('Error saving quality settings', 'error')
+            addToast('Fehler beim Speichern', 'error')
         } finally {
             setIsSavingQuality(false)
         }
@@ -279,28 +264,28 @@ export default function Dashboard() {
 
     return (
         <div className="app-container">
-            {/* Tutorial Modal (shown once on first visit) */}
+            {/* Tutorial Modal */}
             {showTutorial && (
                 <div className="modal open">
                     <div className="modal-backdrop" onClick={() => setShowTutorial(false)} />
                     <div className="modal-content card max-w-600" style={{ textAlign: 'center', padding: '2.5rem' }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚡</div>
-                        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem' }}>So funktioniert ReStream Nexus</h2>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🛡️</div>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem' }}>Buffered Relay System</h2>
                         <div style={{ textAlign: 'left', marginBottom: '1.5rem' }}>
                             <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid var(--primary)', borderRadius: '12px', padding: '1rem', marginBottom: '0.75rem' }}>
-                                <strong>Schritt 1 — OBS Stream starten</strong>
-                                <p className="text-muted text-sm" style={{ marginTop: '0.25rem' }}>Starte deinen Stream in OBS. ReStream Nexus empfängt das Signal automatisch via RTMP.</p>
+                                <strong>Auto-Start bei Verbindung</strong>
+                                <p className="text-muted text-sm" style={{ marginTop: '0.25rem' }}>Sobald OBS verbindet, startet der Main Stream zu deinen Plattformen automatisch.</p>
                             </div>
                             <div style={{ background: 'rgba(46,213,115,0.1)', border: '1px solid var(--success)', borderRadius: '12px', padding: '1rem', marginBottom: '0.75rem' }}>
-                                <strong>Schritt 2 — Übertragung auf der Website starten</strong>
-                                <p className="text-muted text-sm" style={{ marginTop: '0.25rem' }}>Klicke auf "Übertragung Starten" in der Kommandozentrale. Der Stream wird an alle aktiven Plattformen weitergeleitet.</p>
+                                <strong>Intelligenter Buffer</strong>
+                                <p className="text-muted text-sm" style={{ marginTop: '0.25rem' }}>Ein kleiner Buffer überbrückt die Lücke, wenn OBS getrennt wird. Twitch sieht einen unterbrechungsfreien Stream.</p>
                             </div>
                             <div style={{ background: 'rgba(255,165,2,0.1)', border: '1px solid var(--warning)', borderRadius: '12px', padding: '1rem' }}>
-                                <strong>Wichtig: Stream läuft solange die Übertragung aktiv ist</strong>
-                                <p className="text-muted text-sm" style={{ marginTop: '0.25rem' }}>Der Stream zu den Plattformen läuft solange du auf der Seite auf "Übertragung Beenden" klickst – auch wenn OBS getrennt wird (dann läuft das Fallback-Video).</p>
+                                <strong>Native Qualität</strong>
+                                <p className="text-muted text-sm" style={{ marginTop: '0.25rem' }}>Der Fallback nutzt automatisch die Auflösung und FPS deiner letzten OBS Verbindung.</p>
                             </div>
                         </div>
-                        <button className="btn btn-primary" onClick={() => setShowTutorial(false)}>Verstanden, los geht&apos;s! 🚀</button>
+                        <button className="btn btn-primary" onClick={() => setShowTutorial(false)}>Starten 🚀</button>
                     </div>
                 </div>
             )}
@@ -315,124 +300,100 @@ export default function Dashboard() {
             />
 
             <main>
-                {/* Kommandozentrale */}
                 <div className="mb-2">
                     <section className="card h-full flex-col">
                         <h2 className="card-title">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                                strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                            </svg>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
                             <span>{t('command_center')}</span>
                         </h2>
 
-                        {/* Signals Row */}
                         <div className="signal-panels mb-2">
-
                             {/* OBS Input Panel */}
                             <div className="signal-card">
-                                <div className="text-muted mb-05 text-sm">{t('incoming_obs')}</div>
+                                <div className="text-muted mb-05 text-sm">OBS Signal</div>
                                 <div className="text-lg text-bold items-center gap-075 flex">
                                     <div className={`status-dot ${state.obsConnected ? 'active' : 'danger'}`}></div>
-                                    <span>{state.obsConnected ? t('obs_receiving') : t('waiting_obs')}</span>
+                                    <span>{state.obsConnected ? 'Aktiv' : 'Offline'}</span>
                                 </div>
                                 <div className="text-muted text-sm mt-075">
-                                    <span>{t('server')}</span> <span className="server-ip-display text-primary font-mono">rtmp://{state.publicIp}/live</span>
+                                    <span>Server:</span> <span className="server-ip-display text-primary font-mono">rtmp://{state.publicIp}/live</span>
                                 </div>
                                 <div className="text-muted text-sm mt-025">
-                                    <span>{t('streamkey')}</span> <span className="text-primary font-mono" style={{ fontSize: '0.78rem', wordBreak: 'break-all' }}>{streamKey || '—'}</span>
+                                    <span>Key:</span> <span className="text-primary font-mono" style={{ fontSize: '0.78rem' }}>{streamKey || '—'}</span>
                                 </div>
                             </div>
 
-                            {/* Outgoing Broadcast Panel */}
+                            {/* Relay Status Panel */}
                             <div className="signal-card">
-                                <div className="text-muted mb-05 text-sm">{t('outgoing_cast')}</div>
+                                <div className="text-muted mb-05 text-sm">Main Stream Relay</div>
                                 <div className="text-lg text-bold items-center gap-075 flex">
                                     <div className={`status-dot ${state.broadcastActive ? 'warning' : 'danger'}`}></div>
-                                    <span>{state.broadcastActive ? t('live_on_platforms') : t('offline')}</span>
+                                    <span>{state.broadcastActive ? 'Online' : 'Inaktiv'}</span>
                                 </div>
                                 {state.broadcastActive && (
                                     <div className="broadcast-source-text">
-                                        <span className="text-primary">{t('current_broadcast_source')}: </span>
-                                        {state.currentSource === 'obs' ? t('source_obs') : t('source_fallback')}
+                                        <span className="text-primary">Source: </span>
+                                        {state.currentSource === 'obs' ? '🔴 OBS Live' : '⚫ Fallback Video'}
                                     </div>
                                 )}
-
-                                {/* Control Buttons */}
                                 <div className="flex gap-1 mt-1">
                                     <button onClick={handleToggleBroadcast} className={`btn ${state.broadcastActive ? 'btn-danger' : 'btn-primary'} flex-1 p-05 text-sm`}>
-                                        {state.broadcastActive ? t('stop_broadcast') : t('start_broadcast')}
+                                        {state.broadcastActive ? 'Stoppen' : 'Starten'}
                                     </button>
-                                    {state.broadcastActive && (
-                                        <button onClick={handleReconnect} className="btn btn-warning p-05 text-sm flex-center" title={t('reconnect')} style={{ background: '#f59e0b', color: '#000' }}>
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M23 4v6h-6"></path>
-                                                <path d="M1 20v-6h6"></path>
-                                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
-                                                <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                                            </svg>
-                                        </button>
-                                    )}
                                 </div>
                             </div>
-
                         </div>
 
-                        {/* Manual Quality Control Panel — Moved under the signals */}
+                        {/* Settings & Quality Section */}
                         <div className="quality-control-panel-dashboard">
-                            <div className="text-muted mb-075 text-sm flex items-center gap-05">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                                </svg>
-                                <span>{t('quality_settings')}</span>
+                            <div className="text-muted mb-1 text-sm flex items-center gap-05">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                                <strong>System-Einstellungen</strong>
                             </div>
-                            <div className="grid-form gap-1 items-end">
-                                <div className="form-group mb-0">
-                                    <label className="text-xs">{t('resolution')}</label>
-                                    <select
-                                        value={qualitySettings.resolution}
-                                        onChange={(e) => setQualitySettings({ ...qualitySettings, resolution: (e.target as HTMLSelectElement).value })}
-                                        className="form-control p-05 text-sm"
-                                        title={t('resolution')}
-                                    >
-                                        <option value="1920x1080">1920x1080 (FullHD)</option>
-                                        <option value="1280x720">1280x720 (HD)</option>
-                                        <option value="854x480">854x480 (480p)</option>
-                                    </select>
+
+                            <div className="settings-grid">
+                                <div className="setting-item">
+                                    <div className="setting-label-row">
+                                        <label className="text-xs">Auto-Fallback</label>
+                                        <label className="toggle-switch">
+                                            <input type="checkbox" checked={autoFallback} onChange={(e) => setAutoFallback(e.target.checked)} />
+                                            <span className="slider"></span>
+                                        </label>
+                                    </div>
+                                    <p className="text-xs text-muted">Aktiviert Fallback bei OBS Abbruch.</p>
                                 </div>
+
                                 <div className="form-group mb-0">
-                                    <label className="text-xs">{t('fps')}</label>
+                                    <label className="text-xs text-muted">Buffer Dauer (Sekunden)</label>
                                     <input
                                         type="number"
-                                        value={qualitySettings.fps}
-                                        onChange={(e) => setQualitySettings({ ...qualitySettings, fps: parseInt((e.target as HTMLInputElement).value) })}
+                                        step="0.5"
+                                        min="0"
+                                        max="10"
+                                        value={bufferDuration}
+                                        onChange={(e) => setBufferDuration(parseFloat(e.target.value))}
                                         className="form-control p-05 text-sm"
-                                        title={t('fps')}
                                     />
                                 </div>
+
                                 <div className="form-group mb-0">
-                                    <label className="text-xs">{t('bitrate_k')}</label>
+                                    <label className="text-xs text-muted">Fallback Bitrate (kbps)</label>
                                     <input
                                         type="number"
                                         value={qualitySettings.bitrate}
                                         step="500"
-                                        onChange={(e) => setQualitySettings({ ...qualitySettings, bitrate: parseInt((e.target as HTMLInputElement).value) })}
+                                        onChange={(e) => setQualitySettings({ ...qualitySettings, bitrate: parseInt(e.target.value) })}
                                         className="form-control p-05 text-sm"
-                                        title={t('bitrate_k')}
                                     />
                                 </div>
-                                <button
-                                    onClick={handleSaveQuality}
-                                    disabled={isSavingQuality}
-                                    className="btn btn-primary p-05 text-sm"
-                                    style={{ minWidth: '140px' }}
-                                >
-                                    {isSavingQuality ? '...' : t('save_quality')}
+
+                                <button onClick={handleSaveSettings} disabled={isSavingQuality} className="btn btn-primary p-05 text-sm">
+                                    {isSavingQuality ? '...' : 'Speichern'}
                                 </button>
                             </div>
-                            <div className="text-xs text-muted italic mt-075">
-                                {t('quality_hint')}
+
+                            <div className="text-xs text-muted italic mt-1">
+                                Basis-Qualität (Auflösung/FPS) wird automatisch an OBS angepasst.
                             </div>
                         </div>
                     </section>
@@ -477,16 +438,6 @@ export default function Dashboard() {
                                 </button>
                             </div>
 
-                            {/* Fallback Control Button - Only show when broadcast is active */}
-                            {state.broadcastActive && (
-                                <button
-                                    onClick={handleToggleManualFallback}
-                                    className={`btn text-sm p-075 mt-1 w-full ${manualFallbackActive ? 'btn-danger' : 'btn-success'}`}
-                                    title={manualFallbackActive ? 'Fallback deaktivieren' : 'Fallback aktivieren'}
-                                >
-                                    {manualFallbackActive ? '⚫ Fallback aktiv (Video läuft)' : '🔧 Fallback testen'}
-                                </button>
-                            )}
                         </div>
                     </section>
 

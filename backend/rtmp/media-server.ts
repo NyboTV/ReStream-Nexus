@@ -4,22 +4,6 @@ import { RTMP_PORT, NMS_HTTP_PORT } from '../lib/config';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const NodeMediaServer = require('node-media-server');
 
-const config = {
-    rtmp: {
-        port: RTMP_PORT,
-        chunk_size: 60000,
-        gop_cache: true,
-        ping: 2,
-        ping_timeout: 4,
-    },
-    http: {
-        port: NMS_HTTP_PORT,
-        allow_origin: '*',
-        api: true,
-        api_addons: {},
-    },
-};
-
 // Expose nms instance for direct stats access
 let nmsInstance: any = null;
 export function getNmsInstance(): any { return nmsInstance; }
@@ -30,7 +14,25 @@ export function getActiveStreams(): Set<string> { return activeStreams; }
 
 type StreamCallback = (streamPath: string) => void;
 
-export function startMediaServer(onPublish: StreamCallback, onDone: StreamCallback): void {
+export function startMediaServer(onPublish: StreamCallback, onDone: StreamCallback, publicIp?: string): void {
+    const config = {
+        rtmp: {
+            port: RTMP_PORT,
+            chunk_size: 60000,
+            gop_cache: true,
+            ping: 2,
+            ping_timeout: 4,
+            bind_interface: '0.0.0.0',
+        },
+        http: {
+            port: NMS_HTTP_PORT,
+            allow_origin: '*',
+            api: true,
+            api_addons: {},
+            host: publicIp || '0.0.0.0',
+        },
+    };
+
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
     const nms = new NodeMediaServer(config);
     nmsInstance = nms;

@@ -8,7 +8,7 @@ import cookieParser from 'cookie-parser';
 import { WEB_PORT, NMS_HTTP_PORT } from './backend/lib/config';
 import { fetchPublicIp } from './backend/lib/ip';
 import { startMediaServer, getNmsInstance, getActiveStreams } from './backend/rtmp/media-server';
-import { handleObsConnect, handleObsDisconnect, getState, events as managerEvents } from './backend/stream/manager';
+import { handleObsConnect, handleObsDisconnect, getState, managerEvents } from './backend/stream/manager';
 import { attachWebSocketServer } from './backend/ws/handler';
 import { getStreamKeyDb } from './backend/lib/db';
 import targetsRouter from './backend/api/targets';
@@ -110,7 +110,7 @@ startMediaServer(
         const key = await getStreamKeyDb();
         if (streamPath === `/live/${key}`) {
             obsState.value = true;
-            await handleObsConnect();
+            await handleObsConnect(key!); // Manager handles auto-start now
             broadcastFullState();
         }
     },
@@ -146,4 +146,19 @@ httpServer.listen(WEB_PORT, () => {
         .catch((err) => {
             console.error('❌ Next.js failed to start:', err);
         });
+});
+
+// ─── Crash Prevention ──────────────────────────────────────────────────────────
+// Prevent NMS or WebSocket socket errors (like ECONNRESET on reload) 
+// from crashing the entire stream relay process.
+process.on('uncaughtException', (err) => {
+    if ((err as any).code === 'ECONNRESET' || (err as any).code === 'EPIPE') {
+        console.warn('[System] Caught expected socket error (ignoring):', err.message);
+        return;
+    }
+    console.error('[CRITICAL] Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[CRITICAL] Unhandled Rejection at:', promise, 'reason:', reason);
 });

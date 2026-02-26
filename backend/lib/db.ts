@@ -33,6 +33,10 @@ db.serialize(() => {
       value TEXT NOT NULL
     )
   `);
+
+    // Initialize default settings if they don't exist
+    db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('auto_fallback', '1')`);
+    db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('buffer_duration', '1.5')`);
 });
 
 // ─── Targets ──────────────────────────────────────────────────────────────────

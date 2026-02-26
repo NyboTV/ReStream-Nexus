@@ -24,25 +24,17 @@ export interface MasterSettings {
 }
 
 /**
- * The Master process is the ALWAYS-ON "MAIN Stream".
- * Multi-Layer Architecture:
- * 1. Base Layer (ALWAYS): Black screen + Text + Heartbeat Audio (guaraneed to never stop)
- * 2. OBS Layer (optional): Overlaid on base when OBS is connected
- * 3. Fallback Layer (optional): Overlaid on base when OBS is not connected
- * 
- * This ensures ZERO interruption to the Twitch stream during layer transitions.
+ * The Master process is the ALWAYS-ON "RELAY Buffer".
+ * It reads from stdin (piped from Manager's Delay Buffer) and distributes to targets.
  */
-export function startMaster(targets: Target[], settings?: MasterSettings): void {
-    if (masterProcess) stopMaster(); // Ensure clean state
+export function startMaster(targets: Target[], settings: MasterSettings): void {
+    if (masterProcess) stopMaster();
 
     _currentTargets = targets;
-    if (settings) {
-        _masterResolution = settings.resolution;
-        _masterFps = settings.fps;
-        _masterBitrate = settings.bitrate;
-    }
+    _masterResolution = settings.resolution;
+    _masterFps = settings.fps;
+    _masterBitrate = settings.bitrate;
 
-    const [width, height] = _masterResolution.split('x').map(Number);
     const previewUrl = 'rtmp://localhost:1935/live/preview';
     const outputs = [previewUrl];
 
@@ -53,48 +45,30 @@ export function startMaster(targets: Target[], settings?: MasterSettings): void 
         }
     }
 
-    // FFmpeg 'tee' muxer syntax: [f=flv:onfail=ignore]url1|[f=flv:onfail=ignore]url2
-    const teeDescriptor = outputs.map(url => `[f=flv:onfail=ignore:flvflags=no_duration_filesize]${url}`).join('|');
+    const teeDescriptor = outputs.map(url => `[f=flv]${url}`).join('|');
 
     const args: string[] = [
-        // Input 0: OBS/Fallback Source Stream (via RTMP)
-        '-rtbufsize', '16M',
-        '-fflags', 'nobuffer',
+        '-loglevel', 'warning',
+        '-probesize', '100000000',
+        '-analyzeduration', '100000000',
+        '-fflags', 'nobuffer+genpts+igndts',
         '-flags', 'low_delay',
-        '-i', 'rtmp://localhost:1935/live/input',
-
-        // Input 1: Fallback black screen (if input fails)
-        '-f', 'lavfi', '-i', `color=c=black:s=${width}x${height}:r=${_masterFps}`,
-
-        // ─── Direct map with fallback ───
-        '-map', '0:v?',
-        '-map', '1:v',
-        '-map', '0:a?',
-        '-filter_complex', '[0:v]format=pix_fmts=yuv420p[vout]',
-        '-map', '[vout]',
-
-        // ─── Encoding: Low latency ───
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-tune', 'zerolatency',
-        '-crf', '23',
-        '-b:v', `${_masterBitrate}k`,
-        '-maxrate', `${Math.floor(_masterBitrate * 1.2)}k`,
-        '-bufsize', `${Math.floor(_masterBitrate / 2)}k`,
-        '-g', '30',
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        '-shortest',
-
-        // ─── Distribution ───
-        '-f', 'tee',
-        '-max_delay', '2000000',
-        teeDescriptor
+        '-f', 'flv',
+        '-i', 'pipe:0'
     ];
 
-    console.log(`[Master] Starting ALWAYS-ON MAIN Stream (${_masterResolution} @ ${_masterFps}fps, ${_masterBitrate}k)`);
-    console.log(`[Master] Reading from: rtmp://localhost:1935/live/input (Base Input | OBS | Fallback)`);
-    console.log(`[Master] Outputs: ${outputs.length} targets (Twitch, etc.)`);
+    for (const url of outputs) {
+        args.push(
+            '-map', '0:v:0',
+            '-map', '0:a?',
+            '-c', 'copy',
+            '-f', 'flv',
+            '-flvflags', 'no_duration_filesize',
+            url
+        );
+    }
+
+    console.log(`[Master] Starting RELAY Stream for ${_currentTargets.length} targets`);
 
     masterProcess = spawn(ffmpegPath, args);
     _broadcastActive = true;
@@ -103,9 +77,8 @@ export function startMaster(targets: Target[], settings?: MasterSettings): void 
 
     masterProcess.stderr?.on('data', (data) => {
         const msg = data.toString();
-        // Log errors or important info
-        if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('warning')) {
-            console.log(`[Master FFmpeg] ${msg.trim()}`);
+        if (msg.toLowerCase().includes('error')) {
+            console.log(`[Master FFmpeg Error] ${msg.trim()}`);
         }
     });
 
@@ -123,6 +96,11 @@ export function startMaster(targets: Target[], settings?: MasterSettings): void 
     });
 }
 
+// Helper to get the stdin of the master process
+export function getMasterStdin() {
+    return masterProcess?.stdin || null;
+}
+
 export function stopMaster(): void {
     _broadcastActive = false;
     if (_restartTimer) {
@@ -130,8 +108,8 @@ export function stopMaster(): void {
         _restartTimer = null;
     }
     if (masterProcess) {
-        console.log('[Master] Stopping MAIN Stream...');
-        try { masterProcess.kill('SIGTERM'); } catch { /* ignore */ }
+        console.log('[Master] Stopping RELAY Stream...');
+        try { masterProcess.kill('SIGKILL'); } catch { /* ignore */ }
         masterProcess = null;
     }
     masterEvents.emit('stopped');
