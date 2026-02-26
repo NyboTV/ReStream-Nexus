@@ -2,9 +2,9 @@ import path from 'path';
 import fs from 'fs';
 import { EventEmitter } from 'events';
 import { getSetting, getStreamKeyDb, Target } from '../lib/db';
-import { VIDEOS_DIR, CANVAS_RTMP_URL } from '../lib/config';
+import { VIDEOS_DIR } from '../lib/config';
 import { probeStream, ProbeResult } from './probe';
-import { startSource, killSource, SourceType } from './source';
+import { startSource, killSource, SourceType, startBaseInputStream, killBaseInputStream } from './source';
 import { startMaster, stopMaster, masterEvents } from './master';
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -78,24 +78,28 @@ export async function startBroadcast(targets: Target[], isObsConnected: boolean)
 
     const streamKey = await getStreamKeyDb() || 'preview';
     console.log('[Manager] Using streamKey:', streamKey);
-
-    // Ensure we have a valid video if in fallback mode
-    if (currentSource === 'fallback' && (!activeVideo || !fs.existsSync(activeVideo))) {
-        const files = fs.readdirSync(VIDEOS_DIR).filter(f => f.endsWith('.mp4'));
-        if (files.length > 0) {
-            activeVideo = path.join(VIDEOS_DIR, files[0]);
-            console.log('[Manager] Using backup fallback video:', files[0]);
-        }
-    }
+    console.log('[Manager] Starting Master (always sends video to Twitch)');
 
     const mSettings = await getMasterSettings();
+    const [width, height] = mSettings.resolution.split('x').map(Number);
+    
+    // Start base input stream (black frames to rtmp://localhost:1935/live/input)
+    // This ensures Master always has input to read
+    startBaseInputStream(width, height, mSettings.fps);
+    
+    // Start master stream
     startMaster(currentTargets, mSettings);
-    startSource(currentSource, activeVideo, streamKey, mSettings);
+    
+    // Start source immediately if OBS is connected
+    if (isObsConnected) {
+        setTimeout(() => startSource('obs', activeVideo, streamKey, mSettings), 500);
+    }
 }
 
 export function stopBroadcast(): void {
     broadcastActive = false;
     killSource();
+    killBaseInputStream();
     stopMaster();
 }
 
@@ -128,12 +132,14 @@ export async function handleObsConnect(): Promise<void> {
 
 export async function handleObsDisconnect(): Promise<void> {
     if (!broadcastActive || currentSource === 'fallback') return;
-    console.log('[Manager] ⚫ OBS DISCONNECTED → Falling back to Loop Video');
+    console.log('[Manager] ⚫ OBS DISCONNECTED → Switching to Base Input Stream');
     currentSource = 'fallback';
-    const streamKey = await getStreamKeyDb() || 'preview';
-
+    
+    // Kill any active source and restart base input stream
+    killSource();
     const mSettings = await getMasterSettings();
-    startSource('fallback', activeVideo, streamKey, mSettings);
+    const [width, height] = mSettings.resolution.split('x').map(Number);
+    startBaseInputStream(width, height, mSettings.fps);
 }
 
 export function getState(): { broadcastActive: boolean; currentSource: SourceType } {
@@ -170,13 +176,14 @@ export async function stopManualFallback(): Promise<void> {
     }
 
     manualFallbackActive = false;
+    killSource();
     
-    // Only switch back if OBS is available
-    const streamKey = await getStreamKeyDb() || 'preview';
+    // Restart base input stream (black frames)
     const mSettings = await getMasterSettings();
+    const [width, height] = mSettings.resolution.split('x').map(Number);
+    startBaseInputStream(width, height, mSettings.fps);
     
-    // This will show the base layer (black + heartbeat) until OBS connects
-    console.log('[Manager] 🔧 MANUAL FALLBACK DISABLED (showing base layer)');
+    console.log('[Manager] 🔧 MANUAL FALLBACK DISABLED (showing base input stream)');
     events.emit('fallback-status', { manualFallbackActive });
 }
 
